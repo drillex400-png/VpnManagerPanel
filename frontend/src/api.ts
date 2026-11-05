@@ -1,4 +1,4 @@
-import type { DashboardData, Server, Client, TrafficData, ProtocolType, Notification, PingData } from './types';
+import type { DashboardData, Server, Client, TrafficData, Notification, PingData, XrayVersions } from './types';
 
 const BASE = '/api';
 
@@ -7,7 +7,10 @@ async function req<T>(url: string, opts?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     ...opts,
   });
-  if (!res.ok) throw new Error(`API ${res.status}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `API ${res.status}` }));
+    throw new Error(err.error || `API ${res.status}`);
+  }
   return res.json();
 }
 
@@ -18,17 +21,21 @@ export const api = {
     create: (data: Partial<Server>) => req<Server>('/servers', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: Partial<Server>) => req<Server>(`/servers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) => req<{ success: boolean }>(`/servers/${id}`, { method: 'DELETE' }),
-    addProtocol: (serverId: number, data: { type: ProtocolType; port: number }) =>
-      req(`/servers/${serverId}/protocols`, { method: 'POST', body: JSON.stringify(data) }),
-    deleteProtocol: (id: number) => req<{ success: boolean }>(`/protocols/${id}`, { method: 'DELETE' }),
+    start: (id: number) => req<{ success: boolean; error?: string }>(`/servers/${id}/start`, { method: 'POST' }),
+    stop: (id: number) => req<{ success: boolean }>(`/servers/${id}/stop`, { method: 'POST' }),
   },
   clients: {
     list: () => req<Client[]>('/clients'),
-    create: (data: Partial<Client>) => req<Client>('/clients', { method: 'POST', body: JSON.stringify(data) }),
+    create: (data: { name: string; email: string; serverId: number; totalLimit: number; expiryDate: string }) =>
+      req<Client>('/clients', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: Partial<Client>) => req<Client>(`/clients/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) => req<{ success: boolean }>(`/clients/${id}`, { method: 'DELETE' }),
   },
   traffic: (days = 30) => req<TrafficData>(`/traffic?days=${days}`),
   notifications: () => req<Notification[]>('/notifications'),
   ping: () => req<PingData[]>('/ping'),
+  xray: {
+    versions: () => req<XrayVersions>('/xray/versions'),
+    download: (version: string) => req<{ success: boolean; version: string }>('/xray/download', { method: 'POST', body: JSON.stringify({ version }) }),
+  },
 };

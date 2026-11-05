@@ -27,18 +27,18 @@ export default function Traffic() {
   }
 
   const summaries = [
-    { label: 'Upload', value: data.totals.upload.toFixed(1), unit: 'GB', icon: ArrowUp, color: 'text-violet-400', bg: 'bg-violet-500/10' },
-    { label: 'Download', value: data.totals.download.toFixed(1), unit: 'GB', icon: ArrowDown, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
-    { label: 'Total', value: (data.totals.total / 1024).toFixed(2), unit: 'TB', icon: Database, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    { label: 'Upload', value: data.totals.upload.toFixed(2), unit: 'GB', icon: ArrowUp, color: 'text-violet-400', bg: 'bg-violet-500/10' },
+    { label: 'Download', value: data.totals.download.toFixed(2), unit: 'GB', icon: ArrowDown, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
+    { label: 'Total', value: (data.totals.total / 1024).toFixed(3), unit: 'TB', icon: Database, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
   ];
 
-  const maxServer = Math.max(...data.perServer.map((s) => s.upload + s.download));
+  const maxServer = Math.max(...data.perServer.map((s) => s.upload + s.download), 1);
 
   return (
     <div className="px-4 py-6 space-y-5 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold">Traffic</h1>
-        <p className="text-sm text-white/40">Statistics & Analytics</p>
+        <p className="text-sm text-white/40">VLESS + Reality Statistics</p>
       </div>
 
       {/* Range selector */}
@@ -73,69 +73,78 @@ export default function Traffic() {
       </div>
 
       {/* Traffic chart */}
-      <div className="glass-card p-5">
-        <h2 className="text-sm font-semibold text-white/60 mb-4">Traffic Flow</h2>
-        <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={data.daily} margin={{ top: 5, right: 5, left: -28, bottom: 0 }}>
-            <defs>
-              <linearGradient id="tUp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#8B5CF6" stopOpacity={0.4} />
-                <stop offset="100%" stopColor="#8B5CF6" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="tDown" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#06B6D4" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#06B6D4" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <XAxis
-              dataKey="date"
-              tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 9 }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={(v: string) => v.slice(5)}
-              interval={Math.floor(data.daily.length / 6)}
-            />
-            <YAxis
-              tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 9 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <Tooltip
-              contentStyle={{ background: '#16161F', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 12 }}
-              labelStyle={{ color: 'rgba(255,255,255,0.5)' }}
-            />
-            <Area type="monotone" dataKey="download" stroke="#06B6D4" strokeWidth={2} fill="url(#tDown)" />
-            <Area type="monotone" dataKey="upload" stroke="#8B5CF6" strokeWidth={2} fill="url(#tUp)" />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
+      {data.daily.length > 0 ? (
+        <div className="glass-card p-5">
+          <h2 className="text-sm font-semibold text-white/60 mb-4">Traffic Flow</h2>
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={data.daily} margin={{ top: 5, right: 5, left: -28, bottom: 0 }}>
+              <defs>
+                <linearGradient id="tUp" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8B5CF6" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="#8B5CF6" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="tDown" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#06B6D4" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="#06B6D4" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis
+                dataKey="date"
+                tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 9 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v: string) => v.slice(5)}
+                interval={Math.max(0, Math.floor(data.daily.length / 6) - 1)}
+              />
+              <YAxis
+                tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 9 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                contentStyle={{ background: '#16161F', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 12 }}
+                labelStyle={{ color: 'rgba(255,255,255,0.5)' }}
+              />
+              <Area type="monotone" dataKey="download" stroke="#06B6D4" strokeWidth={2} fill="url(#tDown)" />
+              <Area type="monotone" dataKey="upload" stroke="#8B5CF6" strokeWidth={2} fill="url(#tUp)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="glass-card p-8 text-center">
+          <p className="text-sm text-white/40">No traffic data yet</p>
+          <p className="text-xs text-white/30 mt-1">Start a server and connect clients to see traffic</p>
+        </div>
+      )}
 
       {/* Per-server traffic */}
-      <div className="glass-card p-5">
-        <h2 className="text-sm font-semibold text-white/60 mb-4">Traffic by Server</h2>
-        <ResponsiveContainer width="100%" height={160}>
-          <BarChart data={data.perServer} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
-            <XAxis type="number" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 9 }} axisLine={false} tickLine={false} />
-            <YAxis
-              type="category"
-              dataKey="name"
-              tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-              width={80}
-            />
-            <Tooltip
-              contentStyle={{ background: '#16161F', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 12 }}
-              labelStyle={{ color: 'rgba(255,255,255,0.5)' }}
-              cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-            />
-            <Bar dataKey="upload" stackId="a" fill="#8B5CF6" radius={[0, 0, 0, 0]} />
-            <Bar dataKey="download" stackId="a" fill="#06B6D4" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {data.perServer.length > 0 && data.perServer.some(s => s.upload + s.download > 0) && (
+        <div className="glass-card p-5">
+          <h2 className="text-sm font-semibold text-white/60 mb-4">Traffic by Server</h2>
+          <ResponsiveContainer width="100%" height={Math.max(80, data.perServer.length * 40)}>
+            <BarChart data={data.perServer} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
+              <XAxis type="number" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 9 }} axisLine={false} tickLine={false} />
+              <YAxis
+                type="category"
+                dataKey="name"
+                tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+                width={80}
+              />
+              <Tooltip
+                contentStyle={{ background: '#16161F', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 12 }}
+                labelStyle={{ color: 'rgba(255,255,255,0.5)' }}
+                cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+              />
+              <Bar dataKey="upload" stackId="a" fill="#8B5CF6" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="download" stackId="a" fill="#06B6D4" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
-      {/* Protocol donut */}
+      {/* Protocol distribution */}
       <div className="glass-card p-5">
         <h2 className="text-sm font-semibold text-white/60 mb-4">Protocol Distribution</h2>
         <div className="flex items-center gap-4">

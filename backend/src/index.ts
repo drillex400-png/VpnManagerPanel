@@ -1,6 +1,19 @@
 import express from 'express';
 import cors from 'cors';
-import crypto from 'crypto';
+import { store } from './store';
+import {
+  listAvailableVersions,
+  listLocalVersions,
+  downloadVersion,
+  startServer,
+  stopServer,
+  isServerRunning,
+  queryStats,
+  tcpPing,
+  resetProcesses,
+} from './xray/manager';
+import { generateVlessUrl } from './xray/vless';
+import type { ServerData, ClientData } from './store';
 
 const app = express();
 app.use(cors());
@@ -8,218 +21,104 @@ app.use(express.json());
 
 const PORT = Number(process.env.PORT) || 3001;
 
-// ===== Types =====
-type ServerStatus = 'online' | 'offline' | 'maintenance';
-type ProtocolType = 'vless' | 'vmess' | 'trojan' | 'shadowsocks' | 'wireguard' | 'hysteria2' | 'tuic';
-type ClientStatus = 'active' | 'disabled' | 'expired' | 'limited';
+// Reset process tracking on startup (xray processes don't survive restart)
+resetProcesses();
+store.resetStatuses();
 
-interface Server {
-  id: number;
-  name: string;
-  host: string;
-  port: number;
-  location: string;
-  flag: string;
-  status: ServerStatus;
-  uptime: number;
-  cpu: number;
-  ram: number;
-  ramTotal: number;
-  disk: number;
-  diskTotal: number;
-  uploadSpeed: number;
-  downloadSpeed: number;
-  clientCount: number;
-  totalUpload: number;
-  totalDownload: number;
-  createdAt: string;
-  ping: number;
-}
-
-interface Protocol {
-  id: number;
-  serverId: number;
-  type: ProtocolType;
-  port: number;
-  status: 'running' | 'stopped';
-  clients: number;
-  upload: number;
-  download: number;
-}
-
-interface Client {
-  id: number;
-  name: string;
-  email: string;
-  uuid: string;
-  serverId: number;
-  serverName: string;
-  protocol: ProtocolType;
-  status: ClientStatus;
-  upload: number;
-  download: number;
-  totalLimit: number;
-  expiryDate: string;
-  subscriptionUrl: string;
-  createdAt: string;
-  lastConnect: string;
-  ip: string;
-}
-
-interface TrafficPoint {
-  date: string;
-  upload: number;
-  download: number;
-}
-
-// ===== Protocol Metadata =====
-const PROTOCOL_META: Record<string, { name: string; color: string }> = {
-  vless: { name: 'VLESS + Reality', color: '#8B5CF6' },
-  vmess: { name: 'VMess', color: '#3B82F6' },
-  trojan: { name: 'Trojan', color: '#F97316' },
-  shadowsocks: { name: 'Shadowsocks', color: '#06B6D4' },
-  wireguard: { name: 'WireGuard', color: '#EF4444' },
-  hysteria2: { name: 'Hysteria2', color: '#F59E0B' },
-  tuic: { name: 'TUIC v5', color: '#10B981' },
-};
-
-// ===== Seed Data =====
-let servers: Server[] = [
-  { id: 1, name: 'Frankfurt-01', host: 'de-fra-01.vpnctrl.net', port: 443, location: 'Frankfurt, Germany', flag: '🇩🇪', status: 'online', uptime: 99.98, cpu: 34, ram: 58, ramTotal: 8, disk: 42, diskTotal: 160, uploadSpeed: 245.8, downloadSpeed: 890.3, clientCount: 18, totalUpload: 1234.5, totalDownload: 5678.9, ping: 12, createdAt: '2025-08-15T10:00:00Z' },
-  { id: 2, name: 'Amsterdam-01', host: 'nl-ams-01.vpnctrl.net', port: 443, location: 'Amsterdam, Netherlands', flag: '🇳🇱', status: 'online', uptime: 99.95, cpu: 22, ram: 45, ramTotal: 16, disk: 28, diskTotal: 320, uploadSpeed: 180.4, downloadSpeed: 620.7, clientCount: 12, totalUpload: 890.2, totalDownload: 3456.7, ping: 8, createdAt: '2025-09-01T12:00:00Z' },
-  { id: 3, name: 'Tokyo-01', host: 'jp-tyo-01.vpnctrl.net', port: 443, location: 'Tokyo, Japan', flag: '🇯🇵', status: 'online', uptime: 99.89, cpu: 45, ram: 62, ramTotal: 8, disk: 51, diskTotal: 160, uploadSpeed: 310.2, downloadSpeed: 1020.5, clientCount: 9, totalUpload: 567.8, totalDownload: 2345.6, ping: 145, createdAt: '2025-09-20T08:00:00Z' },
-  { id: 4, name: 'NewYork-01', host: 'us-nyc-01.vpnctrl.net', port: 443, location: 'New York, USA', flag: '🇺🇸', status: 'maintenance', uptime: 98.50, cpu: 0, ram: 0, ramTotal: 16, disk: 35, diskTotal: 320, uploadSpeed: 0, downloadSpeed: 0, clientCount: 5, totalUpload: 234.5, totalDownload: 1234.5, ping: -1, createdAt: '2025-07-10T14:00:00Z' },
-  { id: 5, name: 'Singapore-01', host: 'sg-sin-01.vpnctrl.net', port: 443, location: 'Singapore', flag: '🇸🇬', status: 'online', uptime: 99.92, cpu: 28, ram: 51, ramTotal: 8, disk: 38, diskTotal: 160, uploadSpeed: 195.6, downloadSpeed: 715.3, clientCount: 3, totalUpload: 345.6, totalDownload: 1567.8, ping: 189, createdAt: '2025-10-01T09:00:00Z' },
-];
-
-let protocols: Protocol[] = [
-  { id: 1, serverId: 1, type: 'vless', port: 443, status: 'running', clients: 8, upload: 234.5, download: 1234.5 },
-  { id: 2, serverId: 1, type: 'vmess', port: 8080, status: 'running', clients: 6, upload: 456.7, download: 2345.6 },
-  { id: 3, serverId: 1, type: 'trojan', port: 8443, status: 'running', clients: 4, upload: 123.4, download: 567.8 },
-  { id: 4, serverId: 2, type: 'shadowsocks', port: 8388, status: 'running', clients: 5, upload: 234.5, download: 1234.5 },
-  { id: 5, serverId: 2, type: 'wireguard', port: 51820, status: 'running', clients: 4, upload: 345.6, download: 1567.8 },
-  { id: 6, serverId: 2, type: 'hysteria2', port: 2000, status: 'running', clients: 3, upload: 123.4, download: 456.7 },
-  { id: 7, serverId: 3, type: 'vless', port: 443, status: 'running', clients: 5, upload: 234.5, download: 1234.5 },
-  { id: 8, serverId: 3, type: 'vmess', port: 8080, status: 'running', clients: 4, upload: 123.4, download: 567.8 },
-  { id: 9, serverId: 4, type: 'trojan', port: 8443, status: 'stopped', clients: 3, upload: 123.4, download: 567.8 },
-  { id: 10, serverId: 4, type: 'shadowsocks', port: 8388, status: 'stopped', clients: 2, upload: 45.6, download: 234.5 },
-  { id: 11, serverId: 5, type: 'vless', port: 443, status: 'running', clients: 2, upload: 123.4, download: 567.8 },
-  { id: 12, serverId: 5, type: 'hysteria2', port: 2000, status: 'running', clients: 1, upload: 45.6, download: 234.5 },
-];
-
-const clientNames = [
-  { name: 'Alex Chen', email: 'alex.chen@email.com' },
-  { name: 'Maria Garcia', email: 'maria.g@email.com' },
-  { name: 'Yuki Tanaka', email: 'y.tanaka@email.com' },
-  { name: 'John Smith', email: 'j.smith@email.com' },
-  { name: 'Sofia Müller', email: 's.mueller@email.com' },
-  { name: 'David Kim', email: 'd.kim@email.com' },
-  { name: 'Emma Wilson', email: 'emma.w@email.com' },
-  { name: 'Liu Wei', email: 'liu.wei@email.com' },
-  { name: 'Oliver Brown', email: 'o.brown@email.com' },
-  { name: 'Anna Kowalski', email: 'a.kowalski@email.com' },
-  { name: 'Raj Patel', email: 'r.patel@email.com' },
-  { name: 'Sophie Martin', email: 's.martin@email.com' },
-  { name: 'Tom Anderson', email: 't.anderson@email.com' },
-  { name: 'Lena Petrova', email: 'l.petrova@email.com' },
-  { name: 'Carlos Silva', email: 'c.silva@email.com' },
-];
-
-const clientStatuses: ClientStatus[] = ['active', 'active', 'active', 'active', 'active', 'active', 'active', 'disabled', 'expired', 'limited', 'active', 'disabled', 'expired', 'active', 'limited'];
-const protoTypes: ProtocolType[] = ['vless', 'vmess', 'trojan', 'shadowsocks', 'wireguard', 'hysteria2', 'tuic'];
-
-let clients: Client[] = clientNames.map((c, i) => {
-  const server = servers[i % servers.length];
-  const proto = protocols[i % protocols.length];
-  const status = clientStatuses[i];
-  const daysOffset = Math.floor(Math.random() * 80) - 30;
-  const expiry = new Date();
-  expiry.setDate(expiry.getDate() + daysOffset);
-  const created = new Date();
-  created.setDate(created.getDate() - Math.floor(Math.random() * 90 + 10));
-  const lastConnect = new Date();
-  lastConnect.setHours(lastConnect.getHours() - Math.floor(Math.random() * 48));
-
-  const upload = Math.round(Math.random() * 500 * 10) / 10;
-  const download = Math.round(Math.random() * 2000 * 10) / 10;
-  const totalLimit = [0, 50, 100, 200, 500][i % 5];
-
-  return {
-    id: i + 1,
-    name: c.name,
-    email: c.email,
-    uuid: crypto.randomUUID(),
-    serverId: server.id,
-    serverName: server.name,
-    protocol: proto.type,
-    status,
-    upload,
-    download,
-    totalLimit,
-    expiryDate: expiry.toISOString().split('T')[0],
-    subscriptionUrl: `https://sub.vpnctrl.net/${crypto.randomUUID().slice(0, 8)}`,
-    createdAt: created.toISOString(),
-    lastConnect: lastConnect.toISOString(),
-    ip: `${10 + Math.floor(Math.random() * 50)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-  };
-});
-
-function generateTraffic(days: number): TrafficPoint[] {
-  const data: TrafficPoint[] = [];
-  const now = new Date();
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
-    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-    const baseUpload = 40 + Math.random() * 120;
-    const baseDownload = 120 + Math.random() * 250;
-    const weekendMult = isWeekend ? 0.65 : 1;
-    const trendMult = 1 + (days - i) / days * 0.3;
-    data.push({
-      date: date.toISOString().split('T')[0],
-      upload: Math.round(baseUpload * weekendMult * trendMult * 10) / 10,
-      download: Math.round(baseDownload * weekendMult * trendMult * 10) / 10,
-    });
+// Periodically poll stats from running servers
+setInterval(async () => {
+  for (const server of store.servers) {
+    if (isServerRunning(server.id)) {
+      const stats = queryStats(server.apiPort);
+      if (Object.keys(stats).length > 0) {
+        store.updateTrafficStats(stats);
+      }
+    }
   }
-  return data;
-}
+}, 10000);
 
-let traffic = generateTraffic(90);
+// Daily traffic point
+setInterval(() => store.pushTrafficPoint(), 3600000);
+store.pushTrafficPoint();
 
 // ===== Helpers =====
-const nextId = (arr: { id: number }[]) => (arr.length ? Math.max(...arr.map((x) => x.id)) + 1 : 1);
+function clientWithVless(c: ClientData): ClientData & { vlessUrl: string } {
+  const server = store.getServer(c.serverId);
+  if (!server) return { ...c, vlessUrl: '' };
+  return {
+    ...c,
+    vlessUrl: generateVlessUrl({
+      uuid: c.uuid,
+      host: server.host,
+      port: server.port,
+      publicKey: server.realityPublicKey,
+      sni: server.realitySNI,
+      shortId: server.realityShortIds[0] || '',
+      flow: c.flow,
+      name: c.name,
+    }),
+  };
+}
+
+function serverWithRunning(s: ServerData): ServerData {
+  return { ...s, status: isServerRunning(s.id) ? 'running' : s.status === 'error' ? 'error' : 'stopped' };
+}
 
 // ===== Routes =====
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
+// Xray versions
+app.get('/api/xray/versions', async (_req, res) => {
+  try {
+    const remote = await listAvailableVersions();
+    const local = listLocalVersions();
+    res.json({
+      available: remote,
+      downloaded: local,
+      default: store.DEFAULT_XRAY_VERSION,
+    });
+  } catch (e) {
+    // Fallback: return local versions only
+    res.json({
+      available: listLocalVersions(),
+      downloaded: listLocalVersions(),
+      default: store.DEFAULT_XRAY_VERSION,
+    });
+  }
+});
+
+app.post('/api/xray/download', async (req, res) => {
+  const { version } = req.body;
+  if (!version) return res.status(400).json({ error: 'Version required' });
+  try {
+    await downloadVersion(version);
+    res.json({ success: true, version });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
 // Dashboard
 app.get('/api/dashboard', (_req, res) => {
-  const onlineServers = servers.filter((s) => s.status === 'online').length;
-  const activeClients = clients.filter((c) => c.status === 'active').length;
-  const todayTraffic = traffic[traffic.length - 1];
+  const servers = store.servers.map(serverWithRunning);
+  const runningServers = servers.filter((s) => s.status === 'running').length;
+  const activeClients = store.clients.filter((c) => c.status === 'active').length;
+
+  const traffic = store.traffic;
+  const todayTraffic = traffic[traffic.length - 1] || { date: '', upload: 0, download: 0 };
   const monthTraffic = traffic.slice(-30).reduce(
     (acc, t) => ({ upload: acc.upload + t.upload, download: acc.download + t.download }),
     { upload: 0, download: 0 },
   );
 
-  const protoDist: Record<string, number> = {};
-  protocols.filter((p) => p.status === 'running').forEach((p) => {
-    protoDist[p.type] = (protoDist[p.type] || 0) + p.clients;
-  });
-
   res.json({
-    servers: { total: servers.length, online: onlineServers },
-    clients: { total: clients.length, active: activeClients },
+    servers: { total: servers.length, online: runningServers },
+    clients: { total: store.clients.length, active: activeClients },
     traffic: { today: todayTraffic, month: monthTraffic },
-    protocolDistribution: Object.entries(protoDist)
-      .map(([type, count]) => ({
-        type,
-        name: PROTOCOL_META[type]?.name || type,
-        color: PROTOCOL_META[type]?.color || '#888',
-        count,
-      }))
-      .sort((a, b) => b.count - a.count),
+    protocolDistribution: [
+      { type: 'vless', name: 'VLESS + Reality', color: '#8B5CF6', count: activeClients },
+    ],
     recentTraffic: traffic.slice(-7),
     serversList: servers.map((s) => ({
       id: s.id,
@@ -231,169 +130,155 @@ app.get('/api/dashboard', (_req, res) => {
       clientCount: s.clientCount,
       uploadSpeed: s.uploadSpeed,
       downloadSpeed: s.downloadSpeed,
-      ping: s.ping,
+      ping: 0,
     })),
+    xrayVersions: {
+      available: listLocalVersions(),
+      default: store.DEFAULT_XRAY_VERSION,
+    },
   });
 });
 
 // Servers
 app.get('/api/servers', (_req, res) => {
-  const result = servers.map((s) => ({
-    ...s,
-    protocols: protocols.filter((p) => p.serverId === s.id),
+  const result = store.servers.map((s) => ({
+    ...serverWithRunning(s),
+    protocols: [{ id: 1, serverId: s.id, type: 'vless', port: s.port, status: s.status === 'running' ? 'running' : 'stopped', clients: s.clientCount, upload: s.totalUpload, download: s.totalDownload }],
   }));
   res.json(result);
 });
 
 app.post('/api/servers', (req, res) => {
-  const { name, host, port, location, flag } = req.body;
-  const id = nextId(servers);
-  const server: Server = {
-    id,
+  const { name, host, port, location, flag, xrayVersion, realityDest, realitySNI } = req.body;
+  if (!name || !host) return res.status(400).json({ error: 'Name and host required' });
+
+  const server = store.addServer({
     name,
     host,
     port: port || 443,
-    location,
+    location: location || '',
     flag: flag || '🌐',
-    status: 'online',
-    uptime: 100,
-    cpu: 0,
-    ram: 0,
-    ramTotal: 8,
-    disk: 0,
-    diskTotal: 160,
-    uploadSpeed: 0,
-    downloadSpeed: 0,
-    clientCount: 0,
-    totalUpload: 0,
-    totalDownload: 0,
-    ping: 0,
-    createdAt: new Date().toISOString(),
-  };
-  servers.push(server);
+    xrayVersion: xrayVersion || store.DEFAULT_XRAY_VERSION,
+    realityDest,
+    realitySNI,
+  });
   res.status(201).json(server);
 });
 
 app.put('/api/servers/:id', (req, res) => {
   const id = Number(req.params.id);
-  const idx = servers.findIndex((s) => s.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Server not found' });
-  servers[idx] = { ...servers[idx], ...req.body, id };
-  res.json(servers[idx]);
+  const updated = store.updateServer(id, req.body);
+  if (!updated) return res.status(404).json({ error: 'Server not found' });
+  res.json(updated);
 });
 
 app.delete('/api/servers/:id', (req, res) => {
   const id = Number(req.params.id);
-  servers = servers.filter((s) => s.id !== id);
-  protocols = protocols.filter((p) => p.serverId !== id);
+  stopServer(id);
+  store.deleteServer(id);
   res.json({ success: true });
 });
 
-// Protocols
-app.post('/api/servers/:id/protocols', (req, res) => {
-  const serverId = Number(req.params.id);
-  const { type, port } = req.body;
-  const id = nextId(protocols);
-  const proto: Protocol = {
-    id,
-    serverId,
-    type,
-    port,
-    status: 'running',
-    clients: 0,
-    upload: 0,
-    download: 0,
-  };
-  protocols.push(proto);
-  res.status(201).json(proto);
+// Start/stop xray process
+app.post('/api/servers/:id/start', async (req, res) => {
+  const id = Number(req.params.id);
+  const server = store.getServer(id);
+  if (!server) return res.status(404).json({ error: 'Server not found' });
+
+  const clients = store.getClientsByServer(id);
+  const result = await startServer(server, clients);
+
+  if (result.ok) {
+    store.updateServer(id, { status: 'running', error: undefined });
+  } else {
+    store.updateServer(id, { status: 'error', error: result.error });
+  }
+
+  res.json({ success: result.ok, error: result.error });
 });
 
-app.delete('/api/protocols/:id', (req, res) => {
+app.post('/api/servers/:id/stop', (req, res) => {
   const id = Number(req.params.id);
-  protocols = protocols.filter((p) => p.id !== id);
+  stopServer(id);
+  store.updateServer(id, { status: 'stopped' });
   res.json({ success: true });
 });
 
 // Clients
 app.get('/api/clients', (_req, res) => {
-  res.json(clients);
+  res.json(store.clients.map(clientWithVless));
 });
 
 app.post('/api/clients', (req, res) => {
-  const { name, email, serverId, protocol, totalLimit, expiryDate } = req.body;
-  const server = servers.find((s) => s.id === serverId);
-  const id = nextId(clients);
-  const client: Client = {
-    id,
-    name,
-    email,
-    uuid: crypto.randomUUID(),
-    serverId,
-    serverName: server?.name || '',
-    protocol,
-    status: 'active',
-    upload: 0,
-    download: 0,
-    totalLimit: totalLimit || 0,
-    expiryDate: expiryDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-    subscriptionUrl: `https://sub.vpnctrl.net/${crypto.randomUUID().slice(0, 8)}`,
-    createdAt: new Date().toISOString(),
-    lastConnect: new Date().toISOString(),
-    ip: '0.0.0.0',
-  };
-  clients.push(client);
-  if (server) server.clientCount++;
-  res.status(201).json(client);
+  const { name, email, serverId, totalLimit, expiryDate } = req.body;
+  if (!name || !email || !serverId) return res.status(400).json({ error: 'Name, email and server required' });
+
+  const client = store.addClient({ name, email, serverId, totalLimit, expiryDate });
+
+  // If server is running, restart to apply config
+  const server = store.getServer(serverId);
+  if (server && isServerRunning(serverId)) {
+    const clients = store.getClientsByServer(serverId);
+    startServer(server, clients);
+  }
+
+  res.status(201).json(clientWithVless(client));
 });
 
 app.put('/api/clients/:id', (req, res) => {
   const id = Number(req.params.id);
-  const idx = clients.findIndex((c) => c.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Client not found' });
-  clients[idx] = { ...clients[idx], ...req.body, id };
-  res.json(clients[idx]);
+  const updated = store.updateClient(id, req.body);
+  if (!updated) return res.status(404).json({ error: 'Client not found' });
+
+  // If server is running, restart to apply config
+  const server = store.getServer(updated.serverId);
+  if (server && isServerRunning(updated.serverId)) {
+    const clients = store.getClientsByServer(updated.serverId);
+    startServer(server, clients);
+  }
+
+  res.json(clientWithVless(updated));
 });
 
 app.delete('/api/clients/:id', (req, res) => {
   const id = Number(req.params.id);
-  const client = clients.find((c) => c.id === id);
-  if (client) {
-    const server = servers.find((s) => s.id === client.serverId);
-    if (server && server.clientCount > 0) server.clientCount--;
+  const client = store.clients.find((c) => c.id === id);
+  const serverId = client?.serverId;
+
+  store.deleteClient(id);
+
+  // If server is running, restart to apply config
+  if (serverId) {
+    const server = store.getServer(serverId);
+    if (server && isServerRunning(serverId)) {
+      const clients = store.getClientsByServer(serverId);
+      startServer(server, clients);
+    }
   }
-  clients = clients.filter((c) => c.id !== id);
+
   res.json({ success: true });
 });
 
 // Traffic
 app.get('/api/traffic', (req, res) => {
   const days = Number(req.query.days) || 30;
-  const sliced = traffic.slice(-days);
-  const totals = sliced.reduce(
+  const traffic = store.traffic.slice(-days);
+  const totals = traffic.reduce(
     (acc, t) => ({ upload: acc.upload + t.upload, download: acc.download + t.download }),
     { upload: 0, download: 0 },
   );
-  const perServer = servers.map((s) => ({
+  const perServer = store.servers.map((s) => ({
     name: s.name,
     flag: s.flag,
     upload: s.totalUpload,
     download: s.totalDownload,
   }));
-  const protoDist: Record<string, number> = {};
-  protocols.filter((p) => p.status === 'running').forEach((p) => {
-    protoDist[p.type] = (protoDist[p.type] || 0) + p.clients;
-  });
   res.json({
-    daily: sliced,
+    daily: traffic,
     perServer,
-    protocolDistribution: Object.entries(protoDist)
-      .map(([type, count]) => ({
-        type,
-        name: PROTOCOL_META[type]?.name || type,
-        color: PROTOCOL_META[type]?.color || '#888',
-        count,
-      }))
-      .sort((a, b) => b.count - a.count),
+    protocolDistribution: [
+      { type: 'vless', name: 'VLESS + Reality', color: '#8B5CF6', count: store.clients.filter((c) => c.status === 'active').length },
+    ],
     totals: { upload: totals.upload, download: totals.download, total: totals.upload + totals.download },
   });
 });
@@ -403,25 +288,18 @@ app.get('/api/notifications', (_req, res) => {
   const notifications: { id: number; type: 'warning' | 'error' | 'info' | 'success'; title: string; message: string; time: string; read: boolean }[] = [];
   let nid = 1;
 
+  const servers = store.servers.map(serverWithRunning);
+
   servers.forEach((s) => {
-    if (s.status === 'maintenance') {
-      notifications.push({ id: nid++, type: 'warning', title: 'Server Maintenance', message: `${s.name} (${s.location}) is under maintenance`, time: new Date(Date.now() - 3600000).toISOString(), read: false });
+    if (s.status === 'error') {
+      notifications.push({ id: nid++, type: 'error', title: 'Server Error', message: `${s.name} failed to start${s.error ? `: ${s.error}` : ''}`, time: new Date().toISOString(), read: false });
     }
-    if (s.status === 'offline') {
-      notifications.push({ id: nid++, type: 'error', title: 'Server Offline', message: `${s.name} (${s.location}) is offline`, time: new Date(Date.now() - 7200000).toISOString(), read: false });
-    }
-    if (s.cpu > 80) {
-      notifications.push({ id: nid++, type: 'warning', title: 'High CPU', message: `${s.name} CPU usage at ${s.cpu}%`, time: new Date(Date.now() - 1800000).toISOString(), read: false });
-    }
-    if (s.ram > 80) {
-      notifications.push({ id: nid++, type: 'warning', title: 'High RAM', message: `${s.name} RAM usage at ${s.ram}%`, time: new Date(Date.now() - 1500000).toISOString(), read: false });
-    }
-    if (s.disk > 80) {
-      notifications.push({ id: nid++, type: 'warning', title: 'Low Disk Space', message: `${s.name} disk usage at ${s.disk}%`, time: new Date(Date.now() - 2400000).toISOString(), read: false });
+    if (s.status === 'stopped' && s.clientCount > 0) {
+      notifications.push({ id: nid++, type: 'warning', title: 'Server Stopped', message: `${s.name} is stopped but has ${s.clientCount} client${s.clientCount > 1 ? 's' : ''}`, time: new Date(Date.now() - 3600000).toISOString(), read: false });
     }
   });
 
-  clients.forEach((c) => {
+  store.clients.forEach((c) => {
     const used = c.upload + c.download;
     if (c.status === 'expired') {
       notifications.push({ id: nid++, type: 'error', title: 'Client Expired', message: `${c.name}'s subscription has expired`, time: new Date(Date.now() - 86400000).toISOString(), read: false });
@@ -440,21 +318,24 @@ app.get('/api/notifications', (_req, res) => {
     }
   });
 
-  notifications.push({ id: nid++, type: 'success', title: 'System Update', message: 'VPN Panel updated to version 2.1', time: new Date(Date.now() - 86400000 * 2).toISOString(), read: true });
-  notifications.push({ id: nid++, type: 'info', title: 'New Protocol', message: 'Hysteria2 is now available on all servers', time: new Date(Date.now() - 86400000 * 3).toISOString(), read: true });
+  if (store.servers.length === 0) {
+    notifications.push({ id: nid++, type: 'info', title: 'Welcome', message: 'Add your first server to start managing Xray VPN', time: new Date().toISOString(), read: false });
+  }
 
   res.json(notifications);
 });
 
-// Live ping simulation
-app.get('/api/ping', (_req, res) => {
-  const pings = servers.map((s) => ({
-    id: s.id,
-    name: s.name,
-    ping: s.status === 'online' ? Math.max(1, s.ping + Math.floor(Math.random() * 10) - 5) : -1,
-    status: s.status,
-  }));
-  res.json(pings);
+// Ping
+app.get('/api/ping', async (_req, res) => {
+  const servers = store.servers.map(serverWithRunning);
+  const results = await Promise.all(
+    servers.map(async (s) => {
+      // Ping the local xray port to check if the process is listening
+      const ping = isServerRunning(s.id) ? await tcpPing('127.0.0.1', s.port) : -1;
+      return { id: s.id, name: s.name, ping, status: s.status };
+    }),
+  );
+  res.json(results);
 });
 
 app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));

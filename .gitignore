@@ -1,4 +1,4 @@
 node_modules
-dist
-.env
-*.log
+.xray-bin
+.xray-configs
+.xray-data

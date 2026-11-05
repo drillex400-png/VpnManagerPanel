@@ -5,11 +5,17 @@ services:
     volumes:
       - ./backend:/app
       - backend_deps:/app/node_modules
+      - xray_binaries:/app/.xray-bin
+      - xray_configs:/app/.xray-configs
+      - xray_data:/app/.xray-data
     ports:
       - "3001:3001"
     environment:
       - PORT=3001
       - BASE44_PREVIEW_MODE
+      - XRAY_BIN_DIR=/app/.xray-bin
+      - XRAY_CFG_DIR=/app/.xray-configs
+      - XRAY_DATA_DIR=/app/.xray-data
     command: ["sh", "-c", "npm install && exec npx tsx watch src/index.ts"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"]
@@ -46,3 +52,6 @@ services:
 volumes:
   backend_deps:
   frontend_deps:
+  xray_binaries:
+  xray_configs:
+  xray_data:

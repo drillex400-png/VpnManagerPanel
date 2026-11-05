@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, Copy, X, Clock, Globe, Trash2, Wifi, QrCode } from 'lucide-react';
+import { Plus, Search, Copy, X, Clock, Trash2, Wifi, QrCode, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api';
-import { PROTOCOL_META, PROTOCOL_TYPES } from '../types';
-import type { Client, ClientStatus, ProtocolType, Server } from '../types';
+import { PROTOCOL_META } from '../types';
+import type { Client, ClientStatus, Server } from '../types';
 
 const filterTabs: { key: ClientStatus | 'all'; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -21,12 +21,16 @@ export default function Clients() {
   const [filter, setFilter] = useState<ClientStatus | 'all'>('all');
   const [showAdd, setShowAdd] = useState(false);
   const [qrClient, setQrClient] = useState<Client | null>(null);
-  const [addForm, setAddForm] = useState({ name: '', email: '', serverId: 1, protocol: 'vless' as ProtocolType, totalLimit: 0, expiryDate: '' });
+  const [copied, setCopied] = useState<number | null>(null);
+  const [addForm, setAddForm] = useState({ name: '', email: '', serverId: 0, totalLimit: 0, expiryDate: '' });
 
   useEffect(() => {
     Promise.all([api.clients.list(), api.servers.list()]).then(([c, s]) => {
       setClients(c);
       setServers(s);
+      if (s.length > 0 && addForm.serverId === 0) {
+        setAddForm(prev => ({ ...prev, serverId: s[0].id }));
+      }
       setLoading(false);
     });
   }, []);
@@ -35,7 +39,7 @@ export default function Clients() {
     const expiry = addForm.expiryDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
     api.clients.create({ ...addForm, expiryDate: expiry }).then(() => {
       setShowAdd(false);
-      setAddForm({ name: '', email: '', serverId: 1, protocol: 'vless', totalLimit: 0, expiryDate: '' });
+      setAddForm({ name: '', email: '', serverId: servers[0]?.id || 0, totalLimit: 0, expiryDate: '' });
       api.clients.list().then(setClients);
     });
   };
@@ -49,8 +53,10 @@ export default function Clients() {
     api.clients.update(c.id, { status: newStatus }).then(() => api.clients.list().then(setClients));
   };
 
-  const copyUrl = (url: string) => {
+  const copyUrl = (url: string, id: number) => {
     navigator.clipboard?.writeText(url);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   const filtered = clients.filter((c) => {
@@ -114,12 +120,24 @@ export default function Clients() {
         ))}
       </div>
 
+      {/* Empty state */}
+      {filtered.length === 0 && (
+        <div className="glass-card p-8 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center mx-auto mb-4">
+            <Plus size={28} className="text-violet-400" />
+          </div>
+          <p className="text-sm text-white/60 mb-1">{servers.length === 0 ? 'Add a server first' : 'No clients yet'}</p>
+          <p className="text-xs text-white/30">{servers.length === 0 ? 'You need a server before adding clients' : 'Add your first VLESS+Reality client'}</p>
+        </div>
+      )}
+
       {/* Client cards */}
       {filtered.map((c) => {
         const st = statusStyle(c.status);
         const used = c.upload + c.download;
         const limitPct = c.totalLimit > 0 ? Math.min((used / c.totalLimit) * 100, 100) : 0;
         const dl = daysLeft(c.expiryDate);
+        const server = servers.find(s => s.id === c.serverId);
 
         return (
           <div key={c.id} className="glass-card p-4 animate-slide-up">
@@ -142,11 +160,16 @@ export default function Clients() {
             <div className="flex items-center gap-2 mb-3">
               <span
                 className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                style={{ background: PROTOCOL_META[c.protocol].color + '15', color: PROTOCOL_META[c.protocol].color }}
+                style={{ background: PROTOCOL_META.vless.color + '15', color: PROTOCOL_META.vless.color }}
               >
-                {PROTOCOL_META[c.protocol].name}
+                VLESS + Reality
               </span>
               <span className="text-xs text-white/40">on {c.serverName}</span>
+              {server && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${server.status === 'running' ? 'text-emerald-400 bg-emerald-500/10' : 'text-white/30 bg-white/5'}`}>
+                  {server.status === 'running' ? '●' : '○'}
+                </span>
+              )}
             </div>
 
             {/* Data usage */}
@@ -154,7 +177,7 @@ export default function Clients() {
               <div className="flex justify-between text-[10px] mb-1">
                 <span className="text-white/40">Data used</span>
                 <span className="text-white/60">
-                  {used.toFixed(1)} GB{c.totalLimit > 0 ? ` / ${c.totalLimit} GB` : ' ∞'}
+                  {used.toFixed(2)} GB{c.totalLimit > 0 ? ` / ${c.totalLimit} GB` : ' ∞'}
                 </span>
               </div>
               {c.totalLimit > 0 && (
@@ -188,11 +211,11 @@ export default function Clients() {
                   <QrCode size={14} />
                 </button>
                 <button
-                  onClick={() => copyUrl(c.subscriptionUrl)}
+                  onClick={() => copyUrl(c.vlessUrl, c.id)}
                   className="text-white/30 hover:text-violet-400 transition-colors"
-                  title="Copy subscription URL"
+                  title="Copy VLESS URL"
                 >
-                  <Copy size={14} />
+                  {copied === c.id ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                 </button>
                 <button
                   onClick={() => toggleStatus(c)}
@@ -213,7 +236,11 @@ export default function Clients() {
       })}
 
       {/* FAB */}
-      <button onClick={() => setShowAdd(true)} className="fab">
+      <button
+        onClick={() => setShowAdd(true)}
+        disabled={servers.length === 0}
+        className="fab disabled:opacity-30 disabled:pointer-events-none"
+      >
         <Plus size={24} />
       </button>
 
@@ -226,7 +253,7 @@ export default function Clients() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">Add Client</h2>
+              <h2 className="text-lg font-bold">Add VLESS Client</h2>
               <button onClick={() => setShowAdd(false)} className="text-white/40">
                 <X size={20} />
               </button>
@@ -250,21 +277,13 @@ export default function Clients() {
             >
               {servers.map((s) => (
                 <option key={s.id} value={s.id} className="bg-surface">
-                  {s.flag} {s.name} — {s.location}
+                  {s.flag} {s.name} — {s.location} (Xray {s.xrayVersion})
                 </option>
               ))}
             </select>
-            <select
-              value={addForm.protocol}
-              onChange={(e) => setAddForm({ ...addForm, protocol: e.target.value as ProtocolType })}
-              className="glass-input w-full px-4 py-3 text-sm"
-            >
-              {PROTOCOL_TYPES.map((t) => (
-                <option key={t} value={t} className="bg-surface">
-                  {PROTOCOL_META[t].name}
-                </option>
-              ))}
-            </select>
+            <div className="bg-white/[0.02] rounded-2xl p-3 text-xs text-white/40">
+              Protocol: VLESS + Reality • Flow: xtls-rprx-vision
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <input
                 type="number"
@@ -282,7 +301,7 @@ export default function Clients() {
             </div>
             <button
               onClick={handleAdd}
-              disabled={!addForm.name || !addForm.email}
+              disabled={!addForm.name || !addForm.email || !addForm.serverId}
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition-transform"
             >
               Add Client
@@ -302,16 +321,16 @@ export default function Clients() {
                 <X size={20} />
               </button>
             </div>
-            <p className="text-xs text-white/40 mb-4">{PROTOCOL_META[qrClient.protocol].name} • {qrClient.serverName}</p>
+            <p className="text-xs text-white/40 mb-4">VLESS + Reality • {qrClient.serverName}</p>
             <div className="bg-white p-4 rounded-2xl inline-block">
-              <QRCodeSVG value={qrClient.subscriptionUrl} size={180} level="M" />
+              <QRCodeSVG value={qrClient.vlessUrl} size={180} level="M" />
             </div>
-            <p className="text-[10px] text-white/30 mt-4 break-all">{qrClient.subscriptionUrl}</p>
+            <p className="text-[10px] text-white/30 mt-4 break-all font-mono">{qrClient.vlessUrl}</p>
             <button
-              onClick={() => copyUrl(qrClient.subscriptionUrl)}
+              onClick={() => copyUrl(qrClient.vlessUrl, qrClient.id)}
               className="w-full mt-4 py-3 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
-              <Copy size={14} /> Copy Subscription URL
+              {copied === qrClient.id ? <Check size={14} /> : <Copy size={14} />} Copy VLESS URL
             </button>
           </div>
         </div>

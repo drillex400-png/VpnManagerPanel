@@ -1,11 +1,9 @@
-export type ServerStatus = 'online' | 'offline' | 'maintenance';
-export type ProtocolType = 'vless' | 'vmess' | 'trojan' | 'shadowsocks' | 'wireguard' | 'hysteria2' | 'tuic';
-export type ClientStatus = 'active' | 'disabled' | 'expired' | 'limited';
+export type ServerStatus = 'running' | 'stopped' | 'error';
 
 export interface Protocol {
   id: number;
   serverId: number;
-  type: ProtocolType;
+  type: 'vless';
   port: number;
   status: 'running' | 'stopped';
   clients: number;
@@ -18,24 +16,30 @@ export interface Server {
   name: string;
   host: string;
   port: number;
+  apiPort: number;
   location: string;
   flag: string;
   status: ServerStatus;
-  uptime: number;
+  xrayVersion: string;
+  realityDest: string;
+  realitySNI: string;
+  realityPublicKey: string;
+  realityPrivateKey: string;
+  realityShortIds: string[];
   cpu: number;
   ram: number;
-  ramTotal: number;
-  disk: number;
-  diskTotal: number;
-  uploadSpeed: number;
-  downloadSpeed: number;
+  uptime: number;
   clientCount: number;
   totalUpload: number;
   totalDownload: number;
+  uploadSpeed: number;
+  downloadSpeed: number;
   createdAt: string;
-  ping: number;
+  error?: string;
   protocols?: Protocol[];
 }
+
+export type ClientStatus = 'active' | 'disabled' | 'expired' | 'limited';
 
 export interface Client {
   id: number;
@@ -44,16 +48,16 @@ export interface Client {
   uuid: string;
   serverId: number;
   serverName: string;
-  protocol: ProtocolType;
   status: ClientStatus;
+  flow: string;
   upload: number;
   download: number;
   totalLimit: number;
   expiryDate: string;
-  subscriptionUrl: string;
   createdAt: string;
   lastConnect: string;
   ip: string;
+  vlessUrl: string;
 }
 
 export interface ServerListItem {
@@ -76,15 +80,16 @@ export interface DashboardData {
     today: { date: string; upload: number; download: number };
     month: { upload: number; download: number };
   };
-  protocolDistribution: { type: ProtocolType; name: string; color: string; count: number }[];
+  protocolDistribution: { type: string; name: string; color: string; count: number }[];
   recentTraffic: { date: string; upload: number; download: number }[];
   serversList: ServerListItem[];
+  xrayVersions: { available: string[]; default: string };
 }
 
 export interface TrafficData {
   daily: { date: string; upload: number; download: number }[];
   perServer: { name: string; flag: string; upload: number; download: number }[];
-  protocolDistribution: { type: ProtocolType; name: string; color: string; count: number }[];
+  protocolDistribution: { type: string; name: string; color: string; count: number }[];
   totals: { upload: number; download: number; total: number };
 }
 
@@ -104,14 +109,12 @@ export interface PingData {
   status: string;
 }
 
-export const PROTOCOL_META: Record<ProtocolType, { name: string; color: string }> = {
-  vless: { name: 'VLESS + Reality', color: '#8B5CF6' },
-  vmess: { name: 'VMess', color: '#3B82F6' },
-  trojan: { name: 'Trojan', color: '#F97316' },
-  shadowsocks: { name: 'Shadowsocks', color: '#06B6D4' },
-  wireguard: { name: 'WireGuard', color: '#EF4444' },
-  hysteria2: { name: 'Hysteria2', color: '#F59E0B' },
-  tuic: { name: 'TUIC v5', color: '#10B981' },
-};
+export interface XrayVersions {
+  available: string[];
+  downloaded: string[];
+  default: string;
+}
 
-export const PROTOCOL_TYPES: ProtocolType[] = ['vless', 'vmess', 'trojan', 'shadowsocks', 'wireguard', 'hysteria2', 'tuic'];
+export const PROTOCOL_META: Record<string, { name: string; color: string }> = {
+  vless: { name: 'VLESS + Reality', color: '#8B5CF6' },
+};
