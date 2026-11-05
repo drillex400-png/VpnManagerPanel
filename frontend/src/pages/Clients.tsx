@@ -110,7 +110,7 @@ export default function Clients() {
   return (
     <div className="px-4 py-6 space-y-4 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold">Clients</h1>
+        <h1 className="text-[1.6rem] font-bold font-display">Clients</h1>
         <p className="text-sm text-white/40">{clients.length} total • {clients.filter(c => c.status === 'active').length} active</p>
       </div>
 

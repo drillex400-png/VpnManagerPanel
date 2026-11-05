@@ -64,7 +64,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Xray Panel</h1>
+          <h1 className="text-[1.7rem] font-bold font-display">Xray Panel</h1>
           <p className="text-sm text-white/40">VLESS + Reality Control Center</p>
         </div>
         <div className="flex items-center gap-3">

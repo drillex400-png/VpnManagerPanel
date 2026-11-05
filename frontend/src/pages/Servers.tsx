@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, ChevronDown, Cpu, HardDrive, MemoryStick, Trash2, X, Globe, Wifi, Play, Square, Download, Key, AlertCircle, Loader2, RotateCcw, FileDown, ScrollText, Pencil } from 'lucide-react';
+import { Plus, Search, ChevronDown, Cpu, HardDrive, MemoryStick, Trash2, X, Globe, Wifi, Play, Square, Download, Loader2, RotateCcw, FileDown, ScrollText, Pencil, Shield } from 'lucide-react';
 import { api } from '../api';
 import { PROTOCOL_META } from '../types';
 import type { Server, PingData, XrayVersions } from '../types';
+import ProtocolEditor from '../components/ProtocolEditor';
 
 const flags = ['🇩🇪', '🇳🇱', '🇯🇵', '🇺🇸', '🇸🇬', '🇬🇧', '🇫🇷', '🇨🇦', '🌐'];
 const REALITY_TARGETS = [
@@ -27,10 +28,10 @@ export default function Servers() {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [starting, setStarting] = useState<number | null>(null);
   const [restarting, setRestarting] = useState<number | null>(null);
-  const [regenerating, setRegenerating] = useState<number | null>(null);
   const [pings, setPings] = useState<PingData[]>([]);
   const [editServer, setEditServer] = useState<Server | null>(null);
   const [editForm, setEditForm] = useState({ name: '', host: '', port: 443, location: '', flag: '🌐' });
+  const [protocolServer, setProtocolServer] = useState<Server | null>(null);
   const [logsServer, setLogsServer] = useState<Server | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [logsInterval, setLogsInterval] = useState<ReturnType<typeof setInterval> | null>(null);
@@ -46,7 +47,6 @@ export default function Servers() {
     load();
     api.xray.versions().then(v => {
       setVersions(v);
-      // Auto-select the first available version if form version is empty
       if (!addForm.xrayVersion && v.available.length > 0) {
         setAddForm(prev => ({ ...prev, xrayVersion: v.available[0] }));
       }
@@ -109,18 +109,6 @@ export default function Servers() {
     }
     setRestarting(null);
     load();
-  };
-
-  const handleRegenerateKeys = async (id: number) => {
-    if (!confirm('Regenerate Reality keys? Existing clients will need updated URLs.')) return;
-    setRegenerating(id);
-    try {
-      await api.servers.regenerateKeys(id);
-      load();
-    } catch (e) {
-      alert(`Error: ${(e as Error).message}`);
-    }
-    setRegenerating(null);
   };
 
   const handleEdit = (s: Server) => {
@@ -196,19 +184,19 @@ export default function Servers() {
     <div className="px-4 py-6 space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Servers</h1>
+          <h1 className="text-[1.6rem] font-bold font-display">Servers</h1>
           <p className="text-sm text-white/40">{servers.length} servers • {servers.filter(s => s.status === 'running').length} running</p>
         </div>
       </div>
 
       {/* Search */}
       <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search servers..."
-          className="glass-input w-full pl-10 pr-4 py-3 text-sm"
+          className="glass-input w-full pl-11 pr-4 py-3 text-sm"
         />
       </div>
 
@@ -237,7 +225,7 @@ export default function Servers() {
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">{s.flag}</span>
                   <div>
-                    <p className="font-semibold">{s.name}</p>
+                    <p className="font-semibold font-display">{s.name}</p>
                     <p className="text-xs text-white/40 flex items-center gap-1">
                       <Globe size={11} /> {s.host}:{s.port}
                     </p>
@@ -280,7 +268,7 @@ export default function Servers() {
                   { icon: MemoryStick, label: 'RAM', value: s.ram },
                   { icon: HardDrive, label: 'SSD', value: 0 },
                 ].map((r, i) => (
-                  <div key={i} className="bg-white/[0.03] rounded-xl p-2">
+                  <div key={i} className="glass-soft rounded-xl p-2">
                     <div className="flex items-center gap-1 mb-1">
                       <r.icon size={11} className="text-white/30" />
                       <span className="text-[9px] text-white/30">{r.label}</span>
@@ -302,12 +290,12 @@ export default function Servers() {
                 {/* Error message */}
                 {s.error && (
                   <div className="flex items-start gap-2 p-3 rounded-2xl bg-red-500/10 text-red-400 text-xs">
-                    <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                    <X size={14} className="flex-shrink-0 mt-0.5" />
                     <span className="break-all">{s.error}</span>
                   </div>
                 )}
 
-                {/* Start/Stop/Restart controls */}
+                {/* Primary controls */}
                 <div className="flex gap-2">
                   {s.status !== 'running' ? (
                     <button
@@ -345,50 +333,31 @@ export default function Servers() {
                 </div>
 
                 {/* Secondary actions */}
-                <div className="flex gap-2 flex-wrap">
+                <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => handleEdit(s)}
-                    className="flex-1 py-2 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
+                    onClick={() => setProtocolServer(s)}
+                    className="py-2.5 rounded-2xl bg-violet-500/10 text-violet-300 text-[11px] font-medium hover:bg-violet-500/20 transition-colors flex items-center justify-center gap-1.5 ring-1 ring-violet-500/20"
                   >
-                    <Pencil size={12} /> Edit
+                    <Shield size={13} /> Edit Protocol
                   </button>
                   <button
-                    onClick={() => handleRegenerateKeys(s.id)}
-                    disabled={regenerating === s.id}
-                    className="flex-1 py-2 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    onClick={() => handleEdit(s)}
+                    className="py-2.5 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    {regenerating === s.id ? <Loader2 size={12} className="animate-spin" /> : <Key size={12} />}
-                    {regenerating === s.id ? '...' : 'Regen Keys'}
+                    <Pencil size={13} /> Edit Server
                   </button>
                   <button
                     onClick={() => openLogs(s)}
-                    className="flex-1 py-2 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
+                    className="py-2.5 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <ScrollText size={12} /> Logs
+                    <ScrollText size={13} /> Logs
                   </button>
                   <button
                     onClick={() => handleExportConfig(s.id)}
-                    className="flex-1 py-2 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
+                    className="py-2.5 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <FileDown size={12} /> Export
+                    <FileDown size={13} /> Export
                   </button>
-                </div>
-
-                {/* Reality config */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs text-white/50 font-medium">
-                    <Key size={12} /> Reality Configuration
-                  </div>
-                  <div className="bg-white/[0.02] rounded-2xl p-3 space-y-2">
-                    <ConfigRow label="Dest" value={s.realityDest} />
-                    <ConfigRow label="SNI" value={s.realitySNI} />
-                    <ConfigRow label="Public Key" value={s.realityPublicKey} mono />
-                    <ConfigRow label="Private Key" value={s.realityPrivateKey} mono />
-                    <ConfigRow label="Short IDs" value={s.realityShortIds.join(', ')} mono />
-                    <ConfigRow label="API Port" value={String(s.apiPort)} />
-                    <ConfigRow label="Xray Version" value={s.xrayVersion} />
-                    <ConfigRow label="Clients" value={String(s.clientCount)} />
-                  </div>
                 </div>
               </div>
             )}
@@ -404,13 +373,13 @@ export default function Servers() {
       {/* Add Server Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowAdd(false)}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
           <div
-            className="relative w-full max-w-md glass-card rounded-t-3xl p-6 animate-slide-up space-y-4 max-h-[85vh] overflow-y-auto"
+            className="relative w-full max-w-md glass-card rounded-t-[2rem] p-6 animate-slide-up space-y-4 max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">Add Xray Server</h2>
+              <h2 className="text-lg font-bold font-display">Add Xray Server</h2>
               <button onClick={() => setShowAdd(false)} className="text-white/40">
                 <X size={20} />
               </button>
@@ -472,8 +441,8 @@ export default function Servers() {
                     </option>
                   ))
                 ) : (
-                  <option value={versions?.default || 'v25.10.14'} className="bg-surface">
-                    {versions?.default || 'v25.10.14'} (default)
+                  <option value={versions?.default || 'v25.10.15'} className="bg-surface">
+                    {versions?.default || 'v25.10.15'} (default)
                   </option>
                 )}
               </select>
@@ -492,7 +461,7 @@ export default function Servers() {
               )}
             </div>
 
-            {/* Reality target */}
+            {/* Reality target (initial SNI — editable later in Protocol Editor) */}
             <div>
               <label className="text-xs text-white/40 mb-1.5 block">Reality Target (SNI)</label>
               <select
@@ -514,13 +483,13 @@ export default function Servers() {
             </div>
 
             <p className="text-[10px] text-white/30 leading-relaxed">
-              X25519 keys and Reality short IDs will be auto-generated. The VLESS+Reality inbound will listen on the specified port.
+              X25519 keys and Reality short IDs will be auto-generated. The VLESS+Reality inbound will listen on the specified port. You can fine-tune all protocol settings later in the Protocol Editor.
             </p>
 
             <button
               onClick={handleAdd}
               disabled={!addForm.name || !addForm.host}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition-transform"
+              className="btn-primary w-full py-3.5 text-sm"
             >
               Add Server
             </button>
@@ -528,16 +497,16 @@ export default function Servers() {
         </div>
       )}
 
-      {/* Edit Server Modal */}
+      {/* Edit Server Modal (basic info only) */}
       {editServer && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setEditServer(null)}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
           <div
-            className="relative w-full max-w-md glass-card rounded-t-3xl p-6 animate-slide-up space-y-4 max-h-[85vh] overflow-y-auto"
+            className="relative w-full max-w-md glass-card rounded-t-[2rem] p-6 animate-slide-up space-y-4 max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">Edit Server</h2>
+              <h2 className="text-lg font-bold font-display">Edit Server</h2>
               <button onClick={() => setEditServer(null)} className="text-white/40">
                 <X size={20} />
               </button>
@@ -583,7 +552,7 @@ export default function Servers() {
             <button
               onClick={handleEditSave}
               disabled={!editForm.name || !editForm.host}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition-transform"
+              className="btn-primary w-full py-3.5 text-sm"
             >
               Save Changes
             </button>
@@ -591,10 +560,19 @@ export default function Servers() {
         </div>
       )}
 
+      {/* Protocol Editor */}
+      {protocolServer && (
+        <ProtocolEditor
+          server={protocolServer}
+          onClose={() => setProtocolServer(null)}
+          onSaved={load}
+        />
+      )}
+
       {/* Logs Modal */}
       {logsServer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={closeLogs}>
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
           <div
             className="relative glass-card m-4 p-5 max-w-md w-full max-h-[70vh] flex flex-col animate-scale-in"
             onClick={(e) => e.stopPropagation()}
@@ -602,7 +580,7 @@ export default function Servers() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <ScrollText size={16} className="text-violet-400" />
-                <h2 className="text-base font-bold">{logsServer.flag} {logsServer.name}</h2>
+                <h2 className="text-base font-bold font-display">{logsServer.flag} {logsServer.name}</h2>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -639,15 +617,6 @@ export default function Servers() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function ConfigRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex items-start justify-between gap-2">
-      <span className="text-[10px] text-white/30 flex-shrink-0 pt-0.5">{label}</span>
-      <span className={`text-[10px] text-white/60 text-right break-all ${mono ? 'font-mono' : ''}`}>{value}</span>
     </div>
   );
 }

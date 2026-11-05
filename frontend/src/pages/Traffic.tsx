@@ -37,7 +37,7 @@ export default function Traffic() {
   return (
     <div className="px-4 py-6 space-y-5 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold">Traffic</h1>
+        <h1 className="text-[1.6rem] font-bold font-display">Traffic</h1>
         <p className="text-sm text-white/40">VLESS + Reality Statistics</p>
       </div>
 
