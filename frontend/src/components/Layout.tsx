@@ -3,11 +3,11 @@ import { Outlet, NavLink } from 'react-router-dom';
 import { LayoutDashboard, Server, Users, Activity, Settings, Menu, X } from 'lucide-react';
 
 const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/servers', icon: Server, label: 'Servers' },
-  { to: '/clients', icon: Users, label: 'Clients' },
-  { to: '/traffic', icon: Activity, label: 'Traffic' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/', icon: LayoutDashboard, label: 'Дашборд' },
+  { to: '/servers', icon: Server, label: 'Ноды' },
+  { to: '/clients', icon: Users, label: 'Клиенты' },
+  { to: '/traffic', icon: Activity, label: 'Трафик' },
+  { to: '/settings', icon: Settings, label: 'Настройки' },
 ];
 
 export default function Layout() {
@@ -30,7 +30,7 @@ export default function Layout() {
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
               <Server size={14} className="text-white" />
             </div>
-            <span className="text-sm font-bold font-display tracking-tight">Xray Panel</span>
+            <span className="text-sm font-bold font-display tracking-tight">Xray Панель</span>
           </div>
           <div className="w-11 h-11 rounded-2xl glass flex items-center justify-center">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white font-semibold text-xs">
@@ -62,8 +62,8 @@ export default function Layout() {
                 <Server size={18} className="text-white" />
               </div>
               <div>
-                <h2 className="text-base font-bold font-display">Xray Panel</h2>
-                <p className="text-[10px] text-white/40">VPN Control Center</p>
+                <h2 className="text-base font-bold font-display">Xray Панель</h2>
+                <p className="text-[10px] text-white/40">Центр управления VPN</p>
               </div>
             </div>
             <button
@@ -107,7 +107,7 @@ export default function Layout() {
           <div className="pt-4 border-t border-white/5">
             <p className="text-[10px] text-white/30 leading-relaxed">
               VLESS · VMess · Trojan · Shadowsocks<br />
-              Powered by Xray-core
+              На ядре Xray-core
             </p>
           </div>
         </div>

@@ -31,9 +31,9 @@ export default function PingWidget() {
   return (
     <div className="glass-card p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-white/60">Live Ping</h2>
+        <h2 className="text-sm font-semibold text-white/60">Пинг в реальном времени</h2>
         <div className="flex items-center gap-2">
-          {avg > 0 && <span className={`text-xs font-mono font-medium ${pingColor(avg)}`}>avg {avg}ms</span>}
+          {avg > 0 && <span className={`text-xs font-mono font-medium ${pingColor(avg)}`}>средн. {avg}мс</span>}
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-[10px] text-white/30">live</span>
@@ -47,7 +47,7 @@ export default function PingWidget() {
             <div className="flex items-center gap-2">
               <div className={`w-1.5 h-1.5 rounded-full ${pingDot(p.ping)} ${p.ping > 0 ? 'animate-pulse' : ''}`} />
               <span className={`text-xs font-mono font-medium tabular-nums w-14 text-right ${pingColor(p.ping)}`}>
-                {p.ping > 0 ? `${p.ping}ms` : 'offline'}
+                {p.ping > 0 ? `${p.ping}мс` : 'офлайн'}
               </span>
             </div>
           </div>

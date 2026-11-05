@@ -14,7 +14,7 @@ import ConfirmDialog from './ConfirmDialog';
 
 interface Props {
   server: Server;
-  inbound?: Inbound | null; // null = create new, Inbound = edit existing
+  inbound?: Inbound | null; // null = создать, Inbound = редактировать
   onClose: () => void;
   onSaved: () => void;
 }
@@ -30,7 +30,7 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRegen, setConfirmRegen] = useState(false);
 
-  // Form state
+  // Состояние формы
   const [protocol, setProtocol] = useState<ProtocolType>(inbound?.protocol || 'vless');
   const [port, setPort] = useState(inbound?.port || server.port || 443);
   const [network, setNetwork] = useState<NetworkType>(inbound?.network || 'tcp');
@@ -70,7 +70,6 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
     const def = getSecurity(s);
     setSecurity(s);
     const newSettings = buildDefaults(def.fields);
-    // For reality, pre-fill from server defaults
     if (s === 'reality' && !inbound) {
       newSettings.dest = 'www.microsoft.com:443';
       newSettings.serverNames = 'www.microsoft.com';
@@ -98,9 +97,9 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
         setSecuritySettings({ ...updatedInbound.securitySettings });
       }
       onSaved();
-      toastSuccess('Reality keys regenerated');
+      toastSuccess('Ключи Reality перегенерированы');
     } catch (e) {
-      toastError(`Error: ${(e as Error).message}`);
+      toastError(`Ошибка: ${(e as Error).message}`);
     }
     setRegenerating(false);
   };
@@ -110,9 +109,9 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
     try {
       await api.xray.download(ver);
       versions.refresh();
-      toastSuccess(`Xray ${ver} downloaded`);
+      toastSuccess(`Xray ${ver} загружен`);
     } catch (e) {
-      toastError(`Download failed: ${(e as Error).message}`);
+      toastError(`Ошибка загрузки: ${(e as Error).message}`);
     }
     setDownloading(null);
   };
@@ -131,12 +130,12 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
         onSaved();
-        toastSuccess(isEdit ? 'Inbound updated' : 'Inbound added');
+        toastSuccess(isEdit ? 'Инбаунд обновлён' : 'Инбаунд добавлен');
         onClose();
       })
       .catch((e) => {
         setSaving(false);
-        toastError(`Save failed: ${(e as Error).message}`);
+        toastError(`Ошибка сохранения: ${(e as Error).message}`);
       });
   };
 
@@ -145,10 +144,10 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
       .deleteInbound(server.id, inbound!.id)
       .then(() => {
         onSaved();
-        toastSuccess('Inbound deleted');
+        toastSuccess('Инбаунд удалён');
         onClose();
       })
-      .catch((e) => toastError(`Delete failed: ${(e as Error).message}`));
+      .catch((e) => toastError(`Ошибка удаления: ${(e as Error).message}`));
   };
 
   const isReality = security === 'reality';
@@ -161,14 +160,14 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
         className="relative w-full max-w-md glass-card rounded-t-[2rem] p-6 animate-slide-up space-y-5 max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* Заголовок */}
         <div className="flex items-center justify-between sticky -top-6 -mt-6 pt-6 pb-2 bg-[rgba(7,7,12,0.6)] backdrop-blur-xl z-10 -mx-6 px-6 rounded-t-[2rem]">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-violet-500/15 flex items-center justify-center">
               <Shield size={18} className="text-violet-400" />
             </div>
             <div>
-              <h2 className="text-lg font-bold font-display">{isEdit ? 'Edit Inbound' : 'Add Inbound'}</h2>
+              <h2 className="text-lg font-bold font-display">{isEdit ? 'Изменить инбаунд' : 'Добавить инбаунд'}</h2>
               <p className="text-[10px] text-white/40">{server.flag} {server.name}</p>
             </div>
           </div>
@@ -177,23 +176,23 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
           </button>
         </div>
 
-        {/* Xray version notice */}
+        {/* Уведомление о версии Xray */}
         {needsDownload && (
           <div className="flex items-center gap-2 p-3 rounded-2xl bg-amber-500/10 text-amber-400 text-xs">
             <Download size={14} className="flex-shrink-0" />
-            <span className="flex-1">Xray {server.xrayVersion} needs download</span>
+            <span className="flex-1">Xray {server.xrayVersion} требует загрузки</span>
             <button
               onClick={() => handleDownloadVersion(server.xrayVersion)}
               disabled={downloading === server.xrayVersion}
               className="px-2 py-1 rounded-lg bg-amber-500/20 text-xs font-medium disabled:opacity-50"
             >
-              {downloading === server.xrayVersion ? <Loader2 size={12} className="animate-spin" /> : 'Download'}
+              {downloading === server.xrayVersion ? <Loader2 size={12} className="animate-spin" /> : 'Загрузить'}
             </button>
           </div>
         )}
 
-        {/* ── Protocol selection ─────────────────────────────────────── */}
-        <Section icon={Radio} title="Protocol">
+        {/* ── Протокол ──────────────────────────────────────────────── */}
+        <Section icon={Radio} title="Протокол">
           {!isEdit && (
             <div className="grid grid-cols-2 gap-2">
               {PROTOCOLS.map((p) => (
@@ -222,7 +221,6 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
             </div>
           )}
 
-          {/* Protocol-specific settings */}
           {protoDef.fields.length > 0 && (
             <div className="space-y-3 mt-3">
               {protoDef.fields.map((f) => (
@@ -238,9 +236,9 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
           )}
         </Section>
 
-        {/* ── Network / Port ────────────────────────────────────────── */}
-        <Section icon={Globe} title="Network & Port">
-          <label className="text-xs text-white/40 mb-1.5 block">Listen Port</label>
+        {/* ── Сеть и порт ───────────────────────────────────────────── */}
+        <Section icon={Globe} title="Сеть и порт">
+          <label className="text-xs text-white/40 mb-1.5 block">Порт прослушивания</label>
           <input
             type="number"
             value={port}
@@ -248,7 +246,7 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
             className="glass-input w-full px-4 py-3 text-sm"
           />
 
-          <label className="text-xs text-white/40 mb-1.5 mt-3 block">Transport</label>
+          <label className="text-xs text-white/40 mb-1.5 mt-3 block">Транспорт</label>
           <div className="grid grid-cols-3 gap-2">
             {NETWORKS.filter((n) => protoDef.supportedNetworks.includes(n.type)).map((n) => (
               <button
@@ -266,7 +264,6 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
           </div>
           <p className="text-[10px] text-white/30 mt-1.5">{netDef.description}</p>
 
-          {/* Transport-specific settings */}
           {netDef.fields
             .filter((f) => !f.showIf || transportSettings[f.showIf.field] === f.showIf.value)
             .map((f) => (
@@ -280,8 +277,8 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
             ))}
         </Section>
 
-        {/* ── Security ──────────────────────────────────────────────── */}
-        <Section icon={Shield} title="Security">
+        {/* ── Безопасность ─────────────────────────────────────────── */}
+        <Section icon={Shield} title="Безопасность">
           <div className="grid grid-cols-3 gap-2">
             {SECURITY.filter((s) => protoDef.supportedSecurity.includes(s.type)).map((s) => (
               <button
@@ -299,7 +296,6 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
           </div>
           <p className="text-[10px] text-white/30 mt-1.5">{secDef.description}</p>
 
-          {/* Security-specific settings */}
           {secDef.fields
             .filter((f) => !f.showIf || securitySettings[f.showIf.field] === f.showIf.value)
             .map((f) => (
@@ -312,10 +308,10 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
               />
             ))}
 
-          {/* Reality: SNI target quick-pick */}
+          {/* Reality: быстрый выбор SNI */}
           {isReality && (
             <div className="mt-2">
-              <label className="text-[10px] text-white/30 mb-1 block">Quick-pick SNI target</label>
+              <label className="text-[10px] text-white/30 mb-1 block">Быстрый выбор SNI</label>
               <select
                 value={securitySettings.dest || ''}
                 onChange={(e) => {
@@ -336,7 +332,7 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
             </div>
           )}
 
-          {/* Reality: Regenerate keys */}
+          {/* Reality: перегенерация ключей */}
           {isReality && isEdit && (
             <>
               <button
@@ -345,16 +341,16 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
                 className="w-full mt-3 py-2.5 rounded-2xl bg-violet-500/15 text-violet-400 text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 {regenerating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                {regenerating ? 'Regenerating...' : 'Regenerate Reality Keys'}
+                {regenerating ? 'Перегенерация...' : 'Перегенерировать ключи Reality'}
               </button>
               <p className="text-[10px] text-amber-400/60 mt-1.5 leading-relaxed">
-                Regenerating keys invalidates all existing client URLs for this server.
+                Перегенерация ключей аннулирует все клиентские ссылки для этой ноды.
               </p>
             </>
           )}
         </Section>
 
-        {/* ── Actions ───────────────────────────────────────────────── */}
+        {/* ── Действия ──────────────────────────────────────────────── */}
         <div className="flex gap-3">
           {isEdit && (
             <button
@@ -370,26 +366,28 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
             className="btn-primary flex-1 py-3.5 text-sm flex items-center justify-center gap-2"
           >
             {saved ? <Check size={16} /> : saving ? <Loader2 size={16} className="animate-spin" /> : isEdit ? <Shield size={16} /> : <Plus size={16} />}
-            {saved ? 'Saved' : saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Inbound'}
+            {saved ? 'Сохранено' : saving ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Добавить инбаунд'}
           </button>
         </div>
       </div>
 
-      {/* Confirm dialogs */}
+      {/* Диалоги подтверждения */}
       <ConfirmDialog
         open={confirmDelete}
-        title="Delete Inbound"
-        message="Delete this inbound? Clients using this protocol will lose connectivity."
-        confirmLabel="Delete"
+        title="Удалить инбаунд"
+        message="Удалить этот инбаунд? Клиенты этого протокола потеряют связь."
+        confirmLabel="Удалить"
+        cancelLabel="Отмена"
         variant="danger"
         onConfirm={() => { setConfirmDelete(false); handleDelete(); }}
         onCancel={() => setConfirmDelete(false)}
       />
       <ConfirmDialog
         open={confirmRegen}
-        title="Regenerate Reality Keys"
-        message="This will generate new X25519 keys. All existing client URLs will be invalidated and must be re-shared."
-        confirmLabel="Regenerate"
+        title="Перегенерировать ключи Reality"
+        message="Будут созданы новые ключи X25519. Все клиентские ссылки аннулируются и потребуют повторной раздачи."
+        confirmLabel="Перегенерировать"
+        cancelLabel="Отмена"
         variant="danger"
         onConfirm={() => { setConfirmRegen(false); handleRegenerateKeys(); }}
         onCancel={() => setConfirmRegen(false)}
@@ -398,7 +396,7 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
   );
 }
 
-// ── Reusable field renderer ────────────────────────────────────────────
+// ── Отрисовка поля ────────────────────────────────────────────────────
 
 function FieldRow({
   field,
@@ -411,7 +409,6 @@ function FieldRow({
   onChange: (v: any) => void;
   allValues: Record<string, any>;
 }) {
-  // Check conditional display
   if (field.showIf) {
     const condVal = allValues[field.showIf.field];
     if (condVal !== field.showIf.value) return null;
@@ -433,7 +430,7 @@ function FieldRow({
             value ? 'bg-violet-500/15 text-violet-300 ring-1 ring-violet-500/30' : 'glass-input text-white/50'
           }`}
         >
-          <span>{value ? 'Enabled' : 'Disabled'}</span>
+          <span>{value ? 'Вкл' : 'Выкл'}</span>
           <span className={`w-9 h-5 rounded-full transition-all relative ${value ? 'bg-violet-500' : 'bg-white/10'}`}>
             <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${value ? 'left-[18px]' : 'left-0.5'}`} />
           </span>
@@ -468,7 +465,7 @@ function FieldRow({
   );
 }
 
-// ── Section wrapper ────────────────────────────────────────────────────
+// ── Обёртка секции ─────────────────────────────────────────────────────
 
 function Section({ icon: Icon, title, children }: { icon: typeof Key; title: string; children: React.ReactNode }) {
   return (
@@ -482,7 +479,7 @@ function Section({ icon: Icon, title, children }: { icon: typeof Key; title: str
   );
 }
 
-// ── Versions hook ──────────────────────────────────────────────────────
+// ── Хук версий ─────────────────────────────────────────────────────────
 
 function useVersions() {
   const [data, setData] = useState<XrayVersions | null>(null);

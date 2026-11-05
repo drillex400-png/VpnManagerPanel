@@ -38,6 +38,12 @@ export interface ServerData {
   createdAt: string;
   error?: string;
   inbounds: InboundData[];
+  // SSH-доступ к удалённой ноде
+  sshPort: number;
+  sshUser: string;
+  sshAuthType: 'key' | 'password';
+  sshPrivateKey: string;
+  sshPassword: string;
   // Legacy fields kept for backward-compat migration (not used if inbounds exist)
   realityDest?: string;
   realitySNI?: string;
@@ -140,6 +146,11 @@ function migrateServer(server: any): ServerData {
     ...server,
     inbounds: [inbound],
     realityPublicKey: keys.publicKey, // keep for URL generation compat
+    sshPort: server.sshPort || 22,
+    sshUser: server.sshUser || 'root',
+    sshAuthType: server.sshAuthType || 'password',
+    sshPrivateKey: server.sshPrivateKey || '',
+    sshPassword: server.sshPassword || '',
   } as ServerData;
 }
 
@@ -218,6 +229,11 @@ export const store = {
     xrayVersion: string;
     realityDest?: string;
     realitySNI?: string;
+    sshPort?: number;
+    sshUser?: string;
+    sshAuthType?: 'key' | 'password';
+    sshPrivateKey?: string;
+    sshPassword?: string;
   }): ServerData {
     const id = this.nextServerId();
     const dest = data.realityDest || 'www.microsoft.com:443';
@@ -272,6 +288,11 @@ export const store = {
       createdAt: new Date().toISOString(),
       inbounds: [inbound],
       realityPublicKey: keys.publicKey,
+      sshPort: data.sshPort || 22,
+      sshUser: data.sshUser || 'root',
+      sshAuthType: data.sshAuthType || 'password',
+      sshPrivateKey: data.sshPrivateKey || '',
+      sshPassword: data.sshPassword || '',
     };
 
     state.servers.push(server);

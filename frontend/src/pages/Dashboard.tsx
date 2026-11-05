@@ -16,11 +16,11 @@ const notifConfig: Record<string, { icon: typeof AlertCircle; color: string; bg:
 function timeAgo(time: string) {
   const diff = Date.now() - new Date(time).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return 'только что';
+  if (mins < 60) return `${mins} мин назад`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return `${hours} ч назад`;
+  return `${Math.floor(hours / 24)} дн назад`;
 }
 
 export default function Dashboard() {
@@ -48,10 +48,10 @@ export default function Dashboard() {
   const monthTotal = data.traffic.month.upload + data.traffic.month.download;
 
   const stats = [
-    { label: 'Servers', value: data.servers.total, sub: `${data.servers.online} running`, icon: ServerIcon, accent: 'text-violet-400', bg: 'bg-violet-500/10' },
-    { label: 'Clients', value: data.clients.total, sub: `${data.clients.active} active`, icon: Users, accent: 'text-cyan-400', bg: 'bg-cyan-500/10' },
-    { label: 'Today', value: `${todayTotal.toFixed(1)}`, unit: 'GB', sub: `↑${data.traffic.today.upload.toFixed(1)} ↓${data.traffic.today.download.toFixed(1)}`, icon: TrendingUp, accent: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-    { label: 'This Month', value: `${(monthTotal / 1024).toFixed(2)}`, unit: 'TB', sub: 'Total traffic', icon: Activity, accent: 'text-amber-400', bg: 'bg-amber-500/10' },
+    { label: 'Ноды', value: data.servers.total, sub: `${data.servers.online} запущено`, icon: ServerIcon, accent: 'text-violet-400', bg: 'bg-violet-500/10' },
+    { label: 'Клиенты', value: data.clients.total, sub: `${data.clients.active} активны`, icon: Users, accent: 'text-cyan-400', bg: 'bg-cyan-500/10' },
+    { label: 'Сегодня', value: `${todayTotal.toFixed(1)}`, unit: 'ГБ', sub: `↑${data.traffic.today.upload.toFixed(1)} ↓${data.traffic.today.download.toFixed(1)}`, icon: TrendingUp, accent: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    { label: 'За месяц', value: `${(monthTotal / 1024).toFixed(2)}`, unit: 'ТБ', sub: 'Всего трафика', icon: Activity, accent: 'text-amber-400', bg: 'bg-amber-500/10' },
   ];
 
   const statusColor = (s: string) =>
@@ -61,37 +61,37 @@ export default function Dashboard() {
 
   return (
     <div className="px-4 py-6 space-y-5 animate-fade-in">
-      {/* Header */}
+      {/* Заголовок */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[1.7rem] font-bold font-display">Xray Panel</h1>
-          <p className="text-sm text-white/40">Multi-Protocol Control Center</p>
+          <h1 className="text-[1.7rem] font-bold font-display">Xray Панель</h1>
+          <p className="text-sm text-white/40">Центр управления мультипротокольным VPN</p>
         </div>
         <div className="flex items-center gap-3">
           <NotificationsPanel />
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white font-semibold text-sm">
-            AD
+            АД
           </div>
         </div>
       </div>
 
-      {/* Xray core badge */}
+      {/* Ядро Xray */}
       {data.xrayVersions && (
         <div className="glass-card p-3 flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center">
             <Cpu size={18} className="text-violet-400" />
           </div>
           <div className="flex-1">
-            <p className="text-xs font-medium">Xray Core</p>
+            <p className="text-xs font-medium">Ядро Xray</p>
             <p className="text-[10px] text-white/40">
-              {data.xrayVersions.available.length} version{data.xrayVersions.available.length !== 1 ? 's' : ''} downloaded
-              {data.xrayVersions.available.length > 0 ? ` • ${data.xrayVersions.available[0]}` : ' • default ' + data.xrayVersions.default}
+              {data.xrayVersions.available.length} верс. загружено
+              {data.xrayVersions.available.length > 0 ? ` • ${data.xrayVersions.available[0]}` : ` • по умолчанию ${data.xrayVersions.default}`}
             </p>
           </div>
         </div>
       )}
 
-      {/* Stats grid */}
+      {/* Статистика */}
       <div className="grid grid-cols-2 gap-3">
         {stats.map((s, i) => (
           <div key={i} className="glass-card p-4 animate-slide-up" style={{ animationDelay: `${i * 60}ms` }}>
@@ -110,12 +110,12 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Traffic chart */}
+      {/* График трафика */}
       {data.recentTraffic.length > 0 && (
         <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-white/60">Traffic Overview</h2>
-            <span className="text-xs text-white/30">Last 7 days</span>
+            <h2 className="text-sm font-semibold text-white/60">Обзор трафика</h2>
+            <span className="text-xs text-white/30">Последние 7 дней</span>
           </div>
           <ResponsiveContainer width="100%" height={140}>
             <AreaChart data={data.recentTraffic} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
@@ -147,24 +147,24 @@ export default function Dashboard() {
           <div className="flex items-center gap-4 mt-2">
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-violet-500" />
-              <span className="text-[10px] text-white/40">Upload</span>
+              <span className="text-[10px] text-white/40">Исходящий</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-cyan-400" />
-              <span className="text-[10px] text-white/40">Download</span>
+              <span className="text-[10px] text-white/40">Входящий</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Live Ping Widget */}
+      {/* Пинг */}
       <PingWidget />
 
-      {/* Recent Alerts */}
+      {/* Последние уведомления */}
       <div className="glass-card p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-white/60">Recent Alerts</h2>
-          <span className="text-xs text-white/30">{notifications.filter((n) => !n.read).length} unread</span>
+          <h2 className="text-sm font-semibold text-white/60">Последние уведомления</h2>
+          <span className="text-xs text-white/30">{notifications.filter((n) => !n.read).length} непрочитанных</span>
         </div>
         <div className="space-y-2.5">
           {notifications.filter((n) => !n.read).slice(0, 4).map((n) => {
@@ -183,15 +183,15 @@ export default function Dashboard() {
             );
           })}
           {notifications.filter((n) => !n.read).length === 0 && (
-            <p className="text-xs text-white/30 text-center py-4">All clear — no unread alerts</p>
+            <p className="text-xs text-white/30 text-center py-4">Всё спокойно — непрочитанных уведомлений нет</p>
           )}
         </div>
       </div>
 
-      {/* Server status */}
+      {/* Статус нод */}
       {data.serversList.length > 0 && (
         <div className="glass-card p-5">
-          <h2 className="text-sm font-semibold text-white/60 mb-4">Server Status</h2>
+          <h2 className="text-sm font-semibold text-white/60 mb-4">Статус нод</h2>
           <div className="space-y-3">
             {data.serversList.map((s) => (
               <div key={s.id} className="flex items-center gap-3">
@@ -199,7 +199,7 @@ export default function Dashboard() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{s.name}</p>
                   <div className="flex gap-3 mt-0.5">
-                    <span className="text-[10px] text-white/30">{s.clientCount} clients</span>
+                    <span className="text-[10px] text-white/30">{s.clientCount} клиентов</span>
                     {s.uploadSpeed > 0 && <span className="text-[10px] text-white/30">↑{s.uploadSpeed} ↓{s.downloadSpeed}</span>}
                   </div>
                 </div>
@@ -210,15 +210,15 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Protocol distribution */}
+      {/* Распределение протоколов */}
       <div className="glass-card p-5">
-        <h2 className="text-sm font-semibold text-white/60 mb-4">Protocol Distribution</h2>
+        <h2 className="text-sm font-semibold text-white/60 mb-4">Распределение протоколов</h2>
         <div className="space-y-3">
           {data.protocolDistribution.map((p) => (
             <div key={p.type}>
               <div className="flex justify-between text-xs mb-1.5">
                 <span className="text-white/70">{p.name}</span>
-                <span className="text-white/40">{p.count} clients</span>
+                <span className="text-white/40">{p.count} клиентов</span>
               </div>
               <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                 <div

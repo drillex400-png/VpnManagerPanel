@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Bell, X, AlertCircle, AlertTriangle, Info, CheckCircle } from 'lucide-react';
 import { api } from '../api';
 import type { Notification } from '../types';
@@ -13,11 +13,11 @@ const typeConfig = {
 function timeAgo(time: string) {
   const diff = Date.now() - new Date(time).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return 'только что';
+  if (mins < 60) return `${mins} мин назад`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return `${hours} ч назад`;
+  return `${Math.floor(hours / 24)} дн назад`;
 }
 
 export default function NotificationsPanel() {
@@ -49,12 +49,12 @@ export default function NotificationsPanel() {
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute top-12 right-0 w-80 max-w-[calc(100vw-2rem)] glass-card p-4 z-50 animate-scale-in max-h-96 overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-sm">Notifications</h3>
-              <span className="text-[10px] text-white/30">{unread} unread</span>
+              <h3 className="font-semibold text-sm">Уведомления</h3>
+              <span className="text-[10px] text-white/30">{unread} непрочитанных</span>
             </div>
             <div className="space-y-1.5">
               {notifications.length === 0 && (
-                <p className="text-xs text-white/30 text-center py-4">No notifications</p>
+                <p className="text-xs text-white/30 text-center py-4">Нет уведомлений</p>
               )}
               {notifications.map((n) => {
                 const cfg = typeConfig[n.type];

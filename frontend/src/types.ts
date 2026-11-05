@@ -39,6 +39,12 @@ export interface Server {
   createdAt: string;
   error?: string;
   inbounds: Inbound[];
+  // SSH-доступ к ноде
+  sshPort: number;
+  sshUser: string;
+  sshAuthType: 'key' | 'password';
+  sshPrivateKey: string;
+  sshPassword: string;
   realityPublicKey?: string;
   // Legacy fields
   realityDest?: string;

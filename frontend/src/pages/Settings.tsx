@@ -45,9 +45,9 @@ export default function SettingsPage() {
       await api.xray.download(version);
       const v = await api.xray.versions();
       setVersions(v);
-      toastSuccess(`Xray ${version} downloaded`);
+      toastSuccess(`Xray ${version} загружен`);
     } catch (e) {
-      toastError(`Download failed: ${(e as Error).message}`);
+      toastError(`Ошибка загрузки: ${(e as Error).message}`);
     }
     setDownloading(null);
   };
@@ -55,15 +55,15 @@ export default function SettingsPage() {
   return (
     <div className="px-4 py-6 space-y-5 animate-fade-in">
       <div>
-        <h1 className="text-[1.6rem] font-bold font-display">Settings</h1>
-        <p className="text-sm text-white/40">Defaults applied to new servers & clients</p>
+        <h1 className="text-[1.6rem] font-bold font-display">Настройки</h1>
+        <p className="text-sm text-white/40">Значения по умолчанию для новых нод и клиентов</p>
       </div>
 
-      {/* Xray Version */}
+      {/* Ядро Xray */}
       <div className="glass-card p-5 space-y-3">
-        <SectionTitle icon={Cpu} title="Xray Core" />
+        <SectionTitle icon={Cpu} title="Ядро Xray" />
         <div>
-          <label className="text-xs text-white/40 mb-1.5 block">Default Version</label>
+          <label className="text-xs text-white/40 mb-1.5 block">Версия по умолчанию</label>
           <select
             value={settings.defaultXrayVersion}
             onChange={(e) => update({ defaultXrayVersion: e.target.value })}
@@ -72,7 +72,7 @@ export default function SettingsPage() {
             {versions?.available?.length ? (
               versions.available.map((v) => (
                 <option key={v} value={v} className="bg-surface">
-                  {v} {versions.downloaded.includes(v) ? '✓' : '(needs download)'}
+                  {v} {versions.downloaded.includes(v) ? '✓' : '(нужна загрузка)'}
                 </option>
               ))
             ) : (
@@ -86,19 +86,19 @@ export default function SettingsPage() {
             disabled={downloading === settings.defaultXrayVersion}
             className="w-full py-2.5 rounded-2xl bg-violet-500/15 text-violet-400 text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-50"
           >
-            {downloading === settings.defaultXrayVersion ? 'Downloading...' : `Download ${settings.defaultXrayVersion}`}
+            {downloading === settings.defaultXrayVersion ? 'Загрузка...' : `Загрузить ${settings.defaultXrayVersion}`}
           </button>
         )}
         <div className="text-[10px] text-white/30">
-          {versions?.downloaded.length || 0} version(s) downloaded locally
+          {versions?.downloaded.length || 0} верс. загружено локально
         </div>
       </div>
 
-      {/* Client Defaults */}
+      {/* Клиенты по умолчанию */}
       <div className="glass-card p-5 space-y-3">
-        <SectionTitle icon={HardDrive} title="Client Defaults" />
+        <SectionTitle icon={HardDrive} title="Клиенты по умолчанию" />
         <div>
-          <label className="text-xs text-white/40 mb-1.5 block">Default Data Limit (GB, 0 = unlimited)</label>
+          <label className="text-xs text-white/40 mb-1.5 block">Лимит трафика (ГБ, 0 = без лимита)</label>
           <input
             type="number"
             value={settings.defaultTotalLimit}
@@ -108,7 +108,7 @@ export default function SettingsPage() {
         </div>
         <div>
           <label className="text-xs text-white/40 mb-1.5 block flex items-center gap-1">
-            <Calendar size={11} /> Default Expiry (days)
+            <Calendar size={11} /> Срок действия (дней)
           </label>
           <input
             type="number"
@@ -119,29 +119,29 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* About */}
+      {/* О протоколах */}
       <div className="glass-card p-5 space-y-2">
-        <SectionTitle icon={Shield} title="Protocol Info" />
+        <SectionTitle icon={Shield} title="О протоколах" />
         <div className="space-y-1.5">
-          <Row label="Protocols" value="VLESS · VMess · Trojan · SS · SOCKS · HTTP" />
-          <Row label="Transports" value="TCP · mKCP · WS · HTTP/2 · gRPC · QUIC" />
-          <Row label="Security" value="None · TLS · Reality" />
-          <Row label="Core" value="Xray-core" />
+          <Row label="Протоколы" value="VLESS · VMess · Trojan · SS · SOCKS · HTTP" />
+          <Row label="Транспорты" value="TCP · mKCP · WS · HTTP/2 · gRPC · QUIC" />
+          <Row label="Безопасность" value="None · TLS · Reality" />
+          <Row label="Ядро" value="Xray-core" />
         </div>
         <p className="text-[10px] text-white/30 leading-relaxed pt-1 flex items-start gap-1.5">
           <Zap size={10} className="text-violet-400 mt-0.5 flex-shrink-0" />
-          Protocol settings (SNI, keys, short IDs, ciphers) are configured per-inbound in the Inbound Editor.
+          Настройки протоколов (SNI, ключи, short IDs, шифры) задаются для каждого инбаунда в редакторе инбаундов.
         </p>
       </div>
 
-      {/* Save button */}
+      {/* Кнопка сохранения */}
       <button
         onClick={handleSave}
         disabled={saving}
         className="btn-primary w-full py-3.5 text-sm flex items-center justify-center gap-2"
       >
         {saved ? <Check size={16} /> : saving ? <RotateCcw size={16} className="animate-spin" /> : <Save size={16} />}
-        {saved ? 'Saved!' : saving ? 'Saving...' : 'Save Settings'}
+        {saved ? 'Сохранено!' : saving ? 'Сохранение...' : 'Сохранить настройки'}
       </button>
     </div>
   );

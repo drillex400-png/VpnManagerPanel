@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, ChevronDown, Cpu, HardDrive, MemoryStick, Trash2, X, Globe, Wifi, Play, Square, Download, Loader2, RotateCcw, FileDown, ScrollText, Pencil, Shield, Layers } from 'lucide-react';
+import { Plus, Search, ChevronDown, Cpu, HardDrive, MemoryStick, Trash2, X, Globe, Wifi, Play, Square, Download, Loader2, RotateCcw, FileDown, ScrollText, Pencil, Shield, Layers, KeyRound, Plug } from 'lucide-react';
 import { api } from '../api';
 import { PROTOCOL_META } from '../protocols';
 import type { Server, PingData, XrayVersions, Inbound } from '../types';
@@ -16,6 +16,13 @@ const REALITY_TARGETS = [
   { dest: 'www.google.com:443', sni: 'www.google.com' },
 ];
 
+const emptyAddForm = {
+  name: '', host: '', port: 443, location: '', flag: '🌐',
+  xrayVersion: '', realityDest: 'www.microsoft.com:443', realitySNI: 'www.microsoft.com',
+  sshPort: 22, sshUser: 'root', sshAuthType: 'password' as 'key' | 'password',
+  sshPrivateKey: '', sshPassword: '',
+};
+
 export default function Servers() {
   const { success: toastSuccess, error: toastError } = useToast();
   const [servers, setServers] = useState<Server[]>([]);
@@ -23,14 +30,13 @@ export default function Servers() {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [addForm, setAddForm] = useState({
-    name: '', host: '', port: 443, location: '', flag: '🌐',
-    xrayVersion: '', realityDest: 'www.microsoft.com:443', realitySNI: 'www.microsoft.com',
-  });
+  const [addForm, setAddForm] = useState({ ...emptyAddForm });
   const [versions, setVersions] = useState<XrayVersions | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [starting, setStarting] = useState<number | null>(null);
   const [restarting, setRestarting] = useState<number | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; info?: string; error?: string } | null>(null);
   const [pings, setPings] = useState<PingData[]>([]);
   const [editServer, setEditServer] = useState<Server | null>(null);
   const [editForm, setEditForm] = useState({ name: '', host: '', port: 443, location: '', flag: '🌐' });
@@ -61,19 +67,35 @@ export default function Servers() {
     return () => clearInterval(interval);
   }, [load]);
 
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await api.servers.testConnection(addForm);
+      setTestResult(res);
+      if (res.ok) toastSuccess('Соединение с нодой установлено');
+      else toastError(res.error || 'Не удалось подключиться');
+    } catch (e) {
+      setTestResult({ ok: false, error: (e as Error).message });
+      toastError(`Ошибка: ${(e as Error).message}`);
+    }
+    setTesting(false);
+  };
+
   const handleAdd = () => {
     api.servers.create(addForm).then(() => {
       setShowAdd(false);
-      setAddForm({ name: '', host: '', port: 443, location: '', flag: '🌐', xrayVersion: '', realityDest: 'www.microsoft.com:443', realitySNI: 'www.microsoft.com' });
+      setAddForm({ ...emptyAddForm });
+      setTestResult(null);
       load();
-      toastSuccess('Server added');
-    }).catch((e) => toastError(`Failed: ${(e as Error).message}`));
+      toastSuccess('Нода добавлена');
+    }).catch((e) => toastError(`Ошибка: ${(e as Error).message}`));
   };
 
   const handleDelete = (id: number) => {
     api.servers.delete(id).then(() => {
       load();
-      toastSuccess('Server deleted');
+      toastSuccess('Нода удалена');
     });
   };
 
@@ -82,12 +104,12 @@ export default function Servers() {
     try {
       const res = await api.servers.start(id);
       if (res.success) {
-        toastSuccess('Server started');
+        toastSuccess('Xray запущен на ноде');
       } else if (res.error) {
-        toastError(`Failed to start: ${res.error}`);
+        toastError(`Не удалось запустить: ${res.error}`);
       }
     } catch (e) {
-      toastError(`Error: ${(e as Error).message}`);
+      toastError(`Ошибка: ${(e as Error).message}`);
     }
     setStarting(null);
     load();
@@ -104,9 +126,9 @@ export default function Servers() {
       await api.xray.download(version);
       const v = await api.xray.versions();
       setVersions(v);
-      toastSuccess(`Xray ${version} downloaded`);
+      toastSuccess(`Xray ${version} загружен`);
     } catch (e) {
-      toastError(`Download failed: ${(e as Error).message}`);
+      toastError(`Ошибка загрузки: ${(e as Error).message}`);
     }
     setDownloading(null);
   };
@@ -115,10 +137,10 @@ export default function Servers() {
     setRestarting(id);
     try {
       const res = await api.servers.restart(id);
-      if (res.success) toastSuccess('Server restarted');
-      else if (res.error) toastError(`Failed to restart: ${res.error}`);
+      if (res.success) toastSuccess('Нода перезапущена');
+      else if (res.error) toastError(`Ошибка перезапуска: ${res.error}`);
     } catch (e) {
-      toastError(`Error: ${(e as Error).message}`);
+      toastError(`Ошибка: ${(e as Error).message}`);
     }
     setRestarting(null);
     load();
@@ -147,9 +169,9 @@ export default function Servers() {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-      toastSuccess('Config exported');
+      toastSuccess('Конфиг экспортирован');
     } catch (e) {
-      toastError(`Export failed: ${(e as Error).message}`);
+      toastError(`Ошибка экспорта: ${(e as Error).message}`);
     }
   };
 
@@ -189,43 +211,43 @@ export default function Servers() {
 
   const statusStyle = (s: string) =>
     s === 'running'
-      ? { dot: 'bg-emerald-400', text: 'text-emerald-400', bg: 'bg-emerald-500/10', label: 'Running' }
+      ? { dot: 'bg-emerald-400', text: 'text-emerald-400', bg: 'bg-emerald-500/10', label: 'Запущен' }
       : s === 'error'
-        ? { dot: 'bg-red-400', text: 'text-red-400', bg: 'bg-red-500/10', label: 'Error' }
-        : { dot: 'bg-white/30', text: 'text-white/50', bg: 'bg-white/5', label: 'Stopped' };
+        ? { dot: 'bg-red-400', text: 'text-red-400', bg: 'bg-red-500/10', label: 'Ошибка' }
+        : { dot: 'bg-white/30', text: 'text-white/50', bg: 'bg-white/5', label: 'Остановлен' };
 
   return (
     <div className="px-4 py-6 space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[1.6rem] font-bold font-display">Servers</h1>
-          <p className="text-sm text-white/40">{servers.length} servers • {servers.filter(s => s.status === 'running').length} running</p>
+          <h1 className="text-[1.6rem] font-bold font-display">Ноды</h1>
+          <p className="text-sm text-white/40">{servers.length} нод • {servers.filter(s => s.status === 'running').length} запущено</p>
         </div>
       </div>
 
-      {/* Search */}
+      {/* Поиск */}
       <div className="relative">
         <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search servers..."
+          placeholder="Поиск нод..."
           className="glass-input w-full pl-11 pr-4 py-3 text-sm"
         />
       </div>
 
-      {/* Empty state */}
+      {/* Пустое состояние */}
       {filtered.length === 0 && (
         <div className="glass-card p-8 text-center">
           <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center mx-auto mb-4">
             <Globe size={28} className="text-violet-400" />
           </div>
-          <p className="text-sm text-white/60 mb-1">No servers yet</p>
-          <p className="text-xs text-white/30">Add your first Xray server to start</p>
+          <p className="text-sm text-white/60 mb-1">Нод пока нет</p>
+          <p className="text-xs text-white/30">Добавьте первую ноду с доступом по SSH</p>
         </div>
       )}
 
-      {/* Server cards */}
+      {/* Карточки нод */}
       {filtered.map((s) => {
         const st = statusStyle(s.status);
         const isExp = expanded === s.id;
@@ -253,7 +275,7 @@ export default function Servers() {
                     const p = pings.find((pp) => pp.id === s.id);
                     const pv = p?.ping ?? -1;
                     const pc = pv < 0 ? 'text-white/20' : pv < 50 ? 'text-emerald-400' : pv < 150 ? 'text-amber-400' : 'text-red-400';
-                    return <span className={`flex items-center gap-0.5 text-[10px] font-mono ${pc}`}><Wifi size={10} />{pv > 0 ? `${pv}ms` : '—'}</span>;
+                    return <span className={`flex items-center gap-0.5 text-[10px] font-mono ${pc}`}><Wifi size={10} />{pv > 0 ? `${pv}мс` : '—'}</span>;
                   })()}
                   <ChevronDown
                     size={18}
@@ -262,7 +284,7 @@ export default function Servers() {
                 </div>
               </div>
 
-              {/* Protocol tags from inbounds */}
+              {/* Теги протоколов */}
               <div className="flex flex-wrap gap-1.5 mb-3">
                 {(s.inbounds || []).map((ib) => {
                   const meta = PROTOCOL_META[ib.protocol] || { name: ib.protocol, color: '#888' };
@@ -281,12 +303,12 @@ export default function Servers() {
                 </span>
               </div>
 
-              {/* Resource bars */}
+              {/* Ресурсы */}
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { icon: Cpu, label: 'CPU', value: s.cpu },
-                  { icon: MemoryStick, label: 'RAM', value: s.ram },
-                  { icon: HardDrive, label: 'SSD', value: 0 },
+                  { icon: Cpu, label: 'ЦП', value: s.cpu },
+                  { icon: MemoryStick, label: 'ОЗУ', value: s.ram },
+                  { icon: HardDrive, label: 'Диск', value: 0 },
                 ].map((r, i) => (
                   <div key={i} className="glass-soft rounded-xl p-2">
                     <div className="flex items-center gap-1 mb-1">
@@ -307,7 +329,7 @@ export default function Servers() {
 
             {isExp && (
               <div className="border-t border-white/5 p-4 space-y-3 animate-slide-down">
-                {/* Error message */}
+                {/* Сообщение об ошибке */}
                 {s.error && (
                   <div className="flex items-start gap-2 p-3 rounded-2xl bg-red-500/10 text-red-400 text-xs">
                     <X size={14} className="flex-shrink-0 mt-0.5" />
@@ -315,7 +337,7 @@ export default function Servers() {
                   </div>
                 )}
 
-                {/* Primary controls */}
+                {/* Основные кнопки */}
                 <div className="flex gap-2">
                   {s.status !== 'running' ? (
                     <button
@@ -324,14 +346,14 @@ export default function Servers() {
                       className="flex-1 py-2.5 rounded-2xl bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       {starting === s.id ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                      {starting === s.id ? 'Starting...' : 'Start'}
+                      {starting === s.id ? 'Запуск...' : 'Запустить'}
                     </button>
                   ) : (
                     <button
                       onClick={() => handleStop(s.id)}
                       className="flex-1 py-2.5 rounded-2xl bg-amber-500/15 text-amber-400 text-xs font-medium hover:bg-amber-500/25 transition-colors flex items-center justify-center gap-1.5"
                     >
-                      <Square size={14} /> Stop
+                      <Square size={14} /> Остановить
                     </button>
                   )}
                   {s.status === 'running' && (
@@ -341,7 +363,7 @@ export default function Servers() {
                       className="flex-1 py-2.5 rounded-2xl bg-violet-500/15 text-violet-400 text-xs font-medium hover:bg-violet-500/25 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       {restarting === s.id ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-                      {restarting === s.id ? '...' : 'Restart'}
+                      {restarting === s.id ? '...' : 'Рестарт'}
                     </button>
                   )}
                   <button
@@ -352,11 +374,11 @@ export default function Servers() {
                   </button>
                 </div>
 
-                {/* Inbound management */}
+                {/* Инбаунды */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-[11px] text-white/50 font-medium">
                     <Layers size={13} className="text-violet-400" />
-                    Inbounds ({(s.inbounds || []).length})
+                    Инбаунды ({(s.inbounds || []).length})
                   </div>
                   {(s.inbounds || []).map((ib) => {
                     const meta = PROTOCOL_META[ib.protocol] || { name: ib.protocol, color: '#888' };
@@ -390,29 +412,29 @@ export default function Servers() {
                     onClick={() => setInboundEditor({ server: s, inbound: null })}
                     className="w-full py-2.5 rounded-2xl bg-violet-500/10 text-violet-300 text-[11px] font-medium hover:bg-violet-500/20 transition-colors flex items-center justify-center gap-1.5 ring-1 ring-violet-500/20"
                   >
-                    <Plus size={13} /> Add Inbound
+                    <Plus size={13} /> Добавить инбаунд
                   </button>
                 </div>
 
-                {/* Secondary actions */}
+                {/* Доп. действия */}
                 <div className="grid grid-cols-3 gap-2 pt-1">
                   <button
                     onClick={() => handleEdit(s)}
                     className="py-2.5 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <Pencil size={13} /> Edit
+                    <Pencil size={13} /> Изменить
                   </button>
                   <button
                     onClick={() => openLogs(s)}
                     className="py-2.5 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <ScrollText size={13} /> Logs
+                    <ScrollText size={13} /> Логи
                   </button>
                   <button
                     onClick={() => handleExportConfig(s.id)}
                     className="py-2.5 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <FileDown size={13} /> Export
+                    <FileDown size={13} /> Экспорт
                   </button>
                 </div>
               </div>
@@ -426,50 +448,54 @@ export default function Servers() {
         <Plus size={24} />
       </button>
 
-      {/* Add Server Modal */}
+      {/* Модальное окно добавления ноды */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowAdd(false)}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
           <div
-            className="relative w-full max-w-md glass-card rounded-t-[2rem] p-6 animate-slide-up space-y-4 max-h-[85vh] overflow-y-auto"
+            className="relative w-full max-w-md glass-card rounded-t-[2rem] p-6 animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold font-display">Add Xray Server</h2>
+              <h2 className="text-lg font-bold font-display">Добавить ноду</h2>
               <button onClick={() => setShowAdd(false)} className="text-white/40">
                 <X size={20} />
               </button>
             </div>
 
-            <input
-              placeholder="Server name"
-              value={addForm.name}
-              onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
-              className="glass-input w-full px-4 py-3 text-sm"
-            />
-            <input
-              placeholder="Host / IP (e.g. vpn.example.com)"
-              value={addForm.host}
-              onChange={(e) => setAddForm({ ...addForm, host: e.target.value })}
-              className="glass-input w-full px-4 py-3 text-sm"
-            />
-            <div className="grid grid-cols-2 gap-3">
+            {/* Основные данные */}
+            <div className="space-y-2">
+              <p className="text-[11px] text-white/40 font-medium">Данные ноды</p>
               <input
-                type="number"
-                placeholder="Port"
-                value={addForm.port}
-                onChange={(e) => setAddForm({ ...addForm, port: Number(e.target.value) })}
+                placeholder="Имя ноды"
+                value={addForm.name}
+                onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
                 className="glass-input w-full px-4 py-3 text-sm"
               />
               <input
-                placeholder="Location"
-                value={addForm.location}
-                onChange={(e) => setAddForm({ ...addForm, location: e.target.value })}
+                placeholder="Хост / IP (например vpn.example.com)"
+                value={addForm.host}
+                onChange={(e) => setAddForm({ ...addForm, host: e.target.value })}
                 className="glass-input w-full px-4 py-3 text-sm"
               />
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="number"
+                  placeholder="Порт Xray"
+                  value={addForm.port}
+                  onChange={(e) => setAddForm({ ...addForm, port: Number(e.target.value) })}
+                  className="glass-input w-full px-4 py-3 text-sm"
+                />
+                <input
+                  placeholder="Локация"
+                  value={addForm.location}
+                  onChange={(e) => setAddForm({ ...addForm, location: e.target.value })}
+                  className="glass-input w-full px-4 py-3 text-sm"
+                />
+              </div>
             </div>
 
-            {/* Flag picker */}
+            {/* Флаг */}
             <div className="flex gap-2 flex-wrap">
               {flags.map((f) => (
                 <button
@@ -482,9 +508,81 @@ export default function Servers() {
               ))}
             </div>
 
-            {/* Xray version selector */}
+            {/* SSH-доступ */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-[11px] text-white/40 font-medium">
+                <KeyRound size={12} className="text-violet-400" />
+                Доступ по SSH
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  placeholder="Пользователь"
+                  value={addForm.sshUser}
+                  onChange={(e) => setAddForm({ ...addForm, sshUser: e.target.value })}
+                  className="glass-input w-full px-4 py-3 text-sm"
+                />
+                <input
+                  type="number"
+                  placeholder="Порт SSH"
+                  value={addForm.sshPort}
+                  onChange={(e) => setAddForm({ ...addForm, sshPort: Number(e.target.value) })}
+                  className="glass-input w-full px-4 py-3 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setAddForm({ ...addForm, sshAuthType: 'password' })}
+                  className={`py-2.5 rounded-2xl text-xs font-medium transition-all ${addForm.sshAuthType === 'password' ? 'bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40' : 'bg-white/5 text-white/50'}`}
+                >
+                  По паролю
+                </button>
+                <button
+                  onClick={() => setAddForm({ ...addForm, sshAuthType: 'key' })}
+                  className={`py-2.5 rounded-2xl text-xs font-medium transition-all ${addForm.sshAuthType === 'key' ? 'bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40' : 'bg-white/5 text-white/50'}`}
+                >
+                  По ключу
+                </button>
+              </div>
+              {addForm.sshAuthType === 'password' ? (
+                <input
+                  type="password"
+                  placeholder="Пароль SSH"
+                  value={addForm.sshPassword}
+                  onChange={(e) => setAddForm({ ...addForm, sshPassword: e.target.value })}
+                  className="glass-input w-full px-4 py-3 text-sm font-mono"
+                />
+              ) : (
+                <textarea
+                  placeholder="Приватный ключ SSH (вставьте содержимое)"
+                  value={addForm.sshPrivateKey}
+                  onChange={(e) => setAddForm({ ...addForm, sshPrivateKey: e.target.value })}
+                  rows={4}
+                  className="glass-input w-full px-4 py-3 text-sm font-mono resize-none"
+                />
+              )}
+
+              {/* Проверка соединения */}
+              <button
+                onClick={handleTestConnection}
+                disabled={!addForm.host || !addForm.sshUser || testing}
+                className="w-full py-2.5 rounded-2xl bg-violet-500/15 text-violet-400 text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                {testing ? <Loader2 size={14} className="animate-spin" /> : <Plug size={14} />}
+                {testing ? 'Проверка...' : 'Проверить соединение'}
+              </button>
+              {testResult && (
+                <div className={`text-[11px] p-2.5 rounded-2xl ${testResult.ok ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                  {testResult.ok ? '✓ Подключение успешно' : `✗ ${testResult.error || 'Ошибка'}`}
+                  {testResult.ok && testResult.info && (
+                    <p className="text-[9px] text-white/30 mt-1 font-mono break-all">{testResult.info}</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Версия Xray */}
             <div>
-              <label className="text-xs text-white/40 mb-1.5 block">Xray Version</label>
+              <label className="text-xs text-white/40 mb-1.5 block">Версия Xray</label>
               <select
                 value={addForm.xrayVersion || versions?.default || ''}
                 onChange={(e) => setAddForm({ ...addForm, xrayVersion: e.target.value })}
@@ -493,12 +591,12 @@ export default function Servers() {
                 {versions?.available?.length ? (
                   versions.available.map((v) => (
                     <option key={v} value={v} className="bg-surface">
-                      {v} {versions.downloaded.includes(v) ? '✓' : '(download needed)'}
+                      {v} {versions.downloaded.includes(v) ? '✓' : '(нужна загрузка)'}
                     </option>
                   ))
                 ) : (
                   <option value={versions?.default || 'v25.10.15'} className="bg-surface">
-                    {versions?.default || 'v25.10.15'} (default)
+                    {versions?.default || 'v25.10.15'} (по умолчанию)
                   </option>
                 )}
               </select>
@@ -509,17 +607,17 @@ export default function Servers() {
                   className="w-full mt-2 py-2.5 rounded-2xl bg-violet-500/15 text-violet-400 text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
                   {downloading === addForm.xrayVersion ? (
-                    <><Loader2 size={14} className="animate-spin" /> Downloading...</>
+                    <><Loader2 size={14} className="animate-spin" /> Загрузка...</>
                   ) : (
-                    <><Download size={14} /> Download Xray {addForm.xrayVersion}</>
+                    <><Download size={14} /> Загрузить Xray {addForm.xrayVersion}</>
                   )}
                 </button>
               )}
             </div>
 
-            {/* Reality target (initial SNI — editable later in Protocol Editor) */}
+            {/* Reality SNI */}
             <div>
-              <label className="text-xs text-white/40 mb-1.5 block">Reality Target (SNI)</label>
+              <label className="text-xs text-white/40 mb-1.5 block">Цель Reality (SNI)</label>
               <select
                 value={addForm.realityDest}
                 onChange={(e) => {
@@ -539,21 +637,21 @@ export default function Servers() {
             </div>
 
             <p className="text-[10px] text-white/30 leading-relaxed">
-              X25519 keys and Reality short IDs will be auto-generated. The VLESS+Reality inbound will listen on the specified port. You can fine-tune all protocol settings later in the Protocol Editor.
+              Ключи X25519 и Reality short IDs генерируются автоматически. Панель подключается к ноде по SSH, устанавливает Xray и управляет им удалённо. Все настройки протокола доступны позже в редакторе инбаундов.
             </p>
 
             <button
               onClick={handleAdd}
-              disabled={!addForm.name || !addForm.host}
+              disabled={!addForm.name || !addForm.host || !addForm.sshUser}
               className="btn-primary w-full py-3.5 text-sm"
             >
-              Add Server
+              Добавить ноду
             </button>
           </div>
         </div>
       )}
 
-      {/* Edit Server Modal (basic info only) */}
+      {/* Редактирование ноды */}
       {editServer && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setEditServer(null)}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
@@ -562,19 +660,19 @@ export default function Servers() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold font-display">Edit Server</h2>
+              <h2 className="text-lg font-bold font-display">Изменить ноду</h2>
               <button onClick={() => setEditServer(null)} className="text-white/40">
                 <X size={20} />
               </button>
             </div>
             <input
-              placeholder="Server name"
+              placeholder="Имя ноды"
               value={editForm.name}
               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
               className="glass-input w-full px-4 py-3 text-sm"
             />
             <input
-              placeholder="Host / IP"
+              placeholder="Хост / IP"
               value={editForm.host}
               onChange={(e) => setEditForm({ ...editForm, host: e.target.value })}
               className="glass-input w-full px-4 py-3 text-sm"
@@ -582,16 +680,16 @@ export default function Servers() {
             <div className="grid grid-cols-2 gap-3">
               <input
                 type="number"
-                placeholder="Port"
+                placeholder="Порт"
                 value={editForm.port}
                 onChange={(e) => setEditForm({ ...editForm, port: Number(e.target.value) })}
                 className="glass-input w-full px-4 py-3 text-sm"
               />
               <input
-                placeholder="Location"
+                placeholder="Локация"
                 value={editForm.location}
                 onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                className="glass-input w-full px-4 py-3 text-sm"
+              className="glass-input w-full px-4 py-3 text-sm"
               />
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -610,13 +708,13 @@ export default function Servers() {
               disabled={!editForm.name || !editForm.host}
               className="btn-primary w-full py-3.5 text-sm"
             >
-              Save Changes
+              Сохранить
             </button>
           </div>
         </div>
       )}
 
-      {/* Inbound Editor */}
+      {/* Редактор инбаундов */}
       {inboundEditor && (
         <InboundEditor
           server={inboundEditor.server}
@@ -626,12 +724,13 @@ export default function Servers() {
         />
       )}
 
-      {/* Delete server confirmation */}
+      {/* Подтверждение удаления ноды */}
       <ConfirmDialog
         open={!!confirmDelete}
-        title="Delete Server"
-        message={`Are you sure you want to delete "${confirmDelete?.name}"? This will stop the server and remove all its clients and inbounds. This cannot be undone.`}
-        confirmLabel="Delete"
+        title="Удалить ноду"
+        message={`Удалить «${confirmDelete?.name}»? Xray будет остановлен, а все клиенты и инбаунды этой ноды удалены. Действие необратимо.`}
+        confirmLabel="Удалить"
+        cancelLabel="Отмена"
         variant="danger"
         onConfirm={() => {
           if (confirmDelete) handleDelete(confirmDelete.id);
@@ -640,18 +739,19 @@ export default function Servers() {
         onCancel={() => setConfirmDelete(null)}
       />
 
-      {/* Delete inbound confirmation */}
+      {/* Подтверждение удаления инбаунда */}
       <ConfirmDialog
         open={!!confirmDeleteInbound}
-        title="Delete Inbound"
-        message={`Delete ${confirmDeleteInbound?.name} inbound on port ${confirmDeleteInbound?.port}? Clients using this protocol will lose connectivity.`}
-        confirmLabel="Delete"
+        title="Удалить инбаунд"
+        message={`Удалить инбаунд ${confirmDeleteInbound?.name} на порту ${confirmDeleteInbound?.port}? Клиенты этого протокола потеряют связь.`}
+        confirmLabel="Удалить"
+        cancelLabel="Отмена"
         variant="danger"
         onConfirm={() => {
           if (confirmDeleteInbound) {
             api.servers.deleteInbound(confirmDeleteInbound.serverId, confirmDeleteInbound.inboundId).then(() => {
               load();
-              toastSuccess('Inbound deleted');
+              toastSuccess('Инбаунд удалён');
             });
           }
           setConfirmDeleteInbound(null);
@@ -659,7 +759,7 @@ export default function Servers() {
         onCancel={() => setConfirmDeleteInbound(null)}
       />
 
-      {/* Logs Modal */}
+      {/* Логи */}
       {logsServer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={closeLogs}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
@@ -677,7 +777,7 @@ export default function Servers() {
                   onClick={() => clearLogs(logsServer.id)}
                   className="text-[10px] px-2 py-1 rounded-lg bg-white/5 text-white/40 hover:text-white/70"
                 >
-                  Clear
+                  Очистить
                 </button>
                 <button onClick={closeLogs} className="text-white/40">
                   <X size={20} />
@@ -686,7 +786,7 @@ export default function Servers() {
             </div>
             <div className="flex-1 overflow-y-auto bg-black/40 rounded-2xl p-3 space-y-0.5">
               {logs.length === 0 ? (
-                <p className="text-xs text-white/30 text-center py-8">No logs yet. Start the server to see logs.</p>
+                <p className="text-xs text-white/30 text-center py-8">Логов пока нет. Запустите ноду, чтобы видеть логи.</p>
               ) : (
                 logs.map((line, i) => (
                   <p
@@ -702,7 +802,7 @@ export default function Servers() {
             </div>
             <div className="flex items-center gap-1.5 mt-2 justify-center">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[9px] text-white/30">live</span>
+              <span className="text-[9px] text-white/30">в реальном времени</span>
             </div>
           </div>
         </div>

@@ -5,9 +5,9 @@ import { api } from '../api';
 import type { TrafficData } from '../types';
 
 const ranges = [
-  { days: 7, label: '7D' },
-  { days: 30, label: '30D' },
-  { days: 90, label: '90D' },
+  { days: 7, label: '7д' },
+  { days: 30, label: '30д' },
+  { days: 90, label: '90д' },
 ];
 
 export default function Traffic() {
@@ -27,9 +27,9 @@ export default function Traffic() {
   }
 
   const summaries = [
-    { label: 'Upload', value: data.totals.upload.toFixed(2), unit: 'GB', icon: ArrowUp, color: 'text-violet-400', bg: 'bg-violet-500/10' },
-    { label: 'Download', value: data.totals.download.toFixed(2), unit: 'GB', icon: ArrowDown, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
-    { label: 'Total', value: (data.totals.total / 1024).toFixed(3), unit: 'TB', icon: Database, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    { label: 'Исходящий', value: data.totals.upload.toFixed(2), unit: 'ГБ', icon: ArrowUp, color: 'text-violet-400', bg: 'bg-violet-500/10' },
+    { label: 'Входящий', value: data.totals.download.toFixed(2), unit: 'ГБ', icon: ArrowDown, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
+    { label: 'Всего', value: (data.totals.total / 1024).toFixed(3), unit: 'ТБ', icon: Database, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
   ];
 
   const maxServer = Math.max(...data.perServer.map((s) => s.upload + s.download), 1);
@@ -37,11 +37,11 @@ export default function Traffic() {
   return (
     <div className="px-4 py-6 space-y-5 animate-fade-in">
       <div>
-        <h1 className="text-[1.6rem] font-bold font-display">Traffic</h1>
-        <p className="text-sm text-white/40">Multi-Protocol Statistics</p>
+        <h1 className="text-[1.6rem] font-bold font-display">Трафик</h1>
+        <p className="text-sm text-white/40">Мультипротокольная статистика</p>
       </div>
 
-      {/* Range selector */}
+      {/* Выбор периода */}
       <div className="flex gap-2">
         {ranges.map((r) => (
           <button
@@ -56,7 +56,7 @@ export default function Traffic() {
         ))}
       </div>
 
-      {/* Summary cards */}
+      {/* Сводные карточки */}
       <div className="grid grid-cols-3 gap-3">
         {summaries.map((s, i) => (
           <div key={i} className="glass-card p-3 text-center">
@@ -72,10 +72,10 @@ export default function Traffic() {
         ))}
       </div>
 
-      {/* Traffic chart */}
+      {/* График трафика */}
       {data.daily.length > 0 ? (
         <div className="glass-card p-5">
-          <h2 className="text-sm font-semibold text-white/60 mb-4">Traffic Flow</h2>
+          <h2 className="text-sm font-semibold text-white/60 mb-4">Поток трафика</h2>
           <ResponsiveContainer width="100%" height={180}>
             <AreaChart data={data.daily} margin={{ top: 5, right: 5, left: -28, bottom: 0 }}>
               <defs>
@@ -112,15 +112,15 @@ export default function Traffic() {
         </div>
       ) : (
         <div className="glass-card p-8 text-center">
-          <p className="text-sm text-white/40">No traffic data yet</p>
-          <p className="text-xs text-white/30 mt-1">Start a server and connect clients to see traffic</p>
+          <p className="text-sm text-white/40">Данных по трафику пока нет</p>
+          <p className="text-xs text-white/30 mt-1">Запустите ноду и подключите клиентов, чтобы видеть трафик</p>
         </div>
       )}
 
-      {/* Per-server traffic */}
+      {/* Трафик по нодам */}
       {data.perServer.length > 0 && data.perServer.some(s => s.upload + s.download > 0) && (
         <div className="glass-card p-5">
-          <h2 className="text-sm font-semibold text-white/60 mb-4">Traffic by Server</h2>
+          <h2 className="text-sm font-semibold text-white/60 mb-4">Трафик по нодам</h2>
           <ResponsiveContainer width="100%" height={Math.max(80, data.perServer.length * 40)}>
             <BarChart data={data.perServer} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
               <XAxis type="number" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 9 }} axisLine={false} tickLine={false} />
@@ -144,9 +144,9 @@ export default function Traffic() {
         </div>
       )}
 
-      {/* Protocol distribution */}
+      {/* Распределение протоколов */}
       <div className="glass-card p-5">
-        <h2 className="text-sm font-semibold text-white/60 mb-4">Protocol Distribution</h2>
+        <h2 className="text-sm font-semibold text-white/60 mb-4">Распределение протоколов</h2>
         <div className="flex items-center gap-4">
           <ResponsiveContainer width={130} height={130}>
             <PieChart>

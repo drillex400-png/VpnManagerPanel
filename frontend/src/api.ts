@@ -21,6 +21,7 @@ export const api = {
     create: (data: Partial<Server>) => req<Server>('/servers', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: Partial<Server>) => req<Server>(`/servers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) => req<{ success: boolean }>(`/servers/${id}`, { method: 'DELETE' }),
+    testConnection: (data: Partial<Server>) => req<{ ok: boolean; error?: string; info?: string }>('/servers/test', { method: 'POST', body: JSON.stringify(data) }),
     start: (id: number) => req<{ success: boolean; error?: string }>(`/servers/${id}/start`, { method: 'POST' }),
     stop: (id: number) => req<{ success: boolean }>(`/servers/${id}/stop`, { method: 'POST' }),
     restart: (id: number) => req<{ success: boolean; error?: string }>(`/servers/${id}/restart`, { method: 'POST' }),

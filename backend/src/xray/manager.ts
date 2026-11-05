@@ -1,33 +1,38 @@
-import { spawn, execSync, ChildProcess } from 'child_process';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, renameSync, readdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { existsSync, mkdirSync, readdirSync, writeFileSync, unlinkSync } from 'fs';
+import { join } from 'path';
+import { execSync } from 'child_process';
 import net from 'net';
 import AdmZip from 'adm-zip';
 import { generateXrayConfig } from './config';
+import { sshExec, sshUpload, testConnection as sshTest } from './ssh';
 import type { ServerData, ClientData } from '../store';
 
+// Каталог на удалённой ноде, где панель хранит бинарник Xray и конфиги серверов.
+const REMOTE_DIR = '/opt/xray-panel';
+
+// Локальный каталог для эталонных версий (используется как справочник).
 const XRAY_BIN_DIR = process.env.XRAY_BIN_DIR || join(process.cwd(), '.xray-bin');
-const XRAY_CFG_DIR = process.env.XRAY_CFG_DIR || join(process.cwd(), '.xray-configs');
-
-// Track running xray processes: serverId -> ChildProcess
-const processes = new Map<number, ChildProcess>();
-
-// Log buffer per server: serverId -> string[]
-const logBuffers = new Map<number, string[]>();
-const MAX_LOG_LINES = 500;
-
-// Ensure directories exist
 mkdirSync(XRAY_BIN_DIR, { recursive: true });
-mkdirSync(XRAY_CFG_DIR, { recursive: true });
 
-function archSuffix(): string {
-  if (process.arch === 'arm64') return 'arm64-v8a';
-  return '64';
+// Ноды, которые панель считает запущенными (PID живёт на самой ноде).
+const runningIds = new Set<number>();
+
+function serverDir(id: number): string {
+  return `${REMOTE_DIR}/server-${id}`;
 }
 
-/**
- * Fetch available Xray-core versions from GitHub releases.
- */
+function binPath(version: string): string {
+  return `${REMOTE_DIR}/xray-${version}/xray`;
+}
+
+// ── Проверка соединения ────────────────────────────────────────────────
+
+export async function testConnection(server: ServerData): Promise<{ ok: boolean; error?: string; info?: string }> {
+  return sshTest(server);
+}
+
+// ── Доступные версии Xray (GitHub) ─────────────────────────────────────
+
 export async function listAvailableVersions(): Promise<string[]> {
   const res = await fetch('https://api.github.com/repos/XTLS/Xray-core/releases?per_page=30', {
     headers: { 'User-Agent': 'vpn-panel' },
@@ -37,213 +42,138 @@ export async function listAvailableVersions(): Promise<string[]> {
   return releases.map((r) => r.tag_name);
 }
 
-/**
- * Check which versions are already downloaded locally.
- */
+/** Версии, скачанные локально (справочник для выпадающего списка). */
 export function listLocalVersions(): string[] {
-  if (!existsSync(XRAY_BIN_DIR)) return [];
-  return readdirSync(XRAY_BIN_DIR)
-    .filter((d: string) => existsSync(join(XRAY_BIN_DIR, d, 'xray')));
+  return readdirSync(XRAY_BIN_DIR).filter((d: string) => existsSync(join(XRAY_BIN_DIR, d, 'xray')));
 }
 
-/**
- * Download and extract a specific Xray-core version.
- * Returns the path to the xray binary.
- */
+/** Скачать версию Xray локально (эталон для списка). На ноду ставится при запуске. */
 export async function downloadVersion(version: string): Promise<string> {
   const versionDir = join(XRAY_BIN_DIR, version);
-  const binaryPath = join(versionDir, 'xray');
-
-  // Already downloaded
-  if (existsSync(binaryPath)) {
-    execSync(`chmod +x ${binaryPath}`);
-    return binaryPath;
-  }
-
   mkdirSync(versionDir, { recursive: true });
+  const binaryPath = join(versionDir, 'xray');
+  if (existsSync(binaryPath)) return binaryPath;
 
-  const zipName = `Xray-linux-${archSuffix()}.zip`;
+  const zipName = 'Xray-linux-64.zip';
   const url = `https://github.com/XTLS/Xray-core/releases/download/${version}/${zipName}`;
-
-  console.log(`[xray] Downloading ${version} from ${url}`);
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'vpn-panel' },
-    redirect: 'follow',
-  });
-  if (!res.ok) throw new Error(`Download failed: ${res.status} ${res.statusText}`);
-
+  const res = await fetch(url, { headers: { 'User-Agent': 'vpn-panel' }, redirect: 'follow' });
+  if (!res.ok) throw new Error(`Download failed: ${res.status}`);
   const arrayBuf = await res.arrayBuffer();
   const zipPath = join(versionDir, 'xray.zip');
   writeFileSync(zipPath, Buffer.from(arrayBuf));
-
-  // Extract using adm-zip (pure JS, no system deps)
   const zip = new AdmZip(zipPath);
   zip.extractAllTo(versionDir, true);
   unlinkSync(zipPath);
-
-  if (!existsSync(binaryPath)) {
-    // The binary might be named differently — try to find it
-    const files = readdirSync(versionDir);
-    const xrayFile = files.find((f: string) => f === 'xray' || f === 'Xray');
-    if (xrayFile && xrayFile !== 'xray') {
-      renameSync(join(versionDir, xrayFile), binaryPath);
-    }
-  }
-
-  if (!existsSync(binaryPath)) throw new Error('xray binary not found after extraction');
-  execSync(`chmod +x ${binaryPath}`);
-
-  console.log(`[xray] ${version} ready at ${binaryPath}`);
+  if (existsSync(binaryPath)) execSync(`chmod +x ${binaryPath}`);
   return binaryPath;
 }
 
-/**
- * Get the binary path for a version (if downloaded).
- */
-export function getBinaryPath(version: string): string | null {
-  const path = join(XRAY_BIN_DIR, version, 'xray');
-  return existsSync(path) ? path : null;
-}
+// ── Управление Xray на ноде ────────────────────────────────────────────
 
 /**
- * Write xray config to file for a server.
- */
-function writeConfig(server: ServerData, clients: ClientData[]): string {
-  const configPath = join(XRAY_CFG_DIR, `server-${server.id}.json`);
-  const config = generateXrayConfig(server, clients);
-  writeFileSync(configPath, JSON.stringify(config, null, 2));
-  return configPath;
-}
-
-/**
- * Start an xray process for a server.
+ * Запустить Xray на удалённой ноде: установка бинарника, загрузка конфига, старт.
  */
 export async function startServer(
   server: ServerData,
   clients: ClientData[],
 ): Promise<{ ok: boolean; error?: string }> {
-  // Stop existing process
-  stopServer(server.id);
+  // Сначала останавливаем предыдущий процесс на ноде.
+  await stopServer(server);
 
-  // Ensure binary is downloaded
-  let binaryPath = getBinaryPath(server.xrayVersion);
-  if (!binaryPath) {
-    try {
-      binaryPath = await downloadVersion(server.xrayVersion);
-    } catch (e) {
-      return { ok: false, error: `Failed to download xray ${server.xrayVersion}: ${(e as Error).message}` };
-    }
-  }
+  const dir = serverDir(server.id);
+  const v = server.xrayVersion;
+  const bp = binPath(v);
 
-  // Write config
-  const configPath = writeConfig(server, clients);
-
-  // Start process
-  return new Promise((resolve) => {
-    const proc = spawn(binaryPath!, ['run', '-c', configPath], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
-    });
-
-    let started = false;
-    let errorMsg = '';
-    let buf = logBuffers.get(server.id) || [];
-    buf.push(`[${new Date().toISOString()}] Starting Xray ${server.xrayVersion} on port ${server.port}...`);
-    logBuffers.set(server.id, buf);
-
-    const appendLog = (text: string) => {
-      const lines = text.split('\n').filter((l: string) => l.trim());
-      let b = logBuffers.get(server.id);
-      if (!b) { b = []; logBuffers.set(server.id, b); }
-      b.push(...lines);
-      if (b.length > MAX_LOG_LINES) b.splice(0, b.length - MAX_LOG_LINES);
+  // 1. Гарантируем наличие бинарника Xray нужной версии на ноде.
+  const ensureBin =
+    `mkdir -p ${REMOTE_DIR}/xray-${v} && cd ${REMOTE_DIR}/xray-${v} && ` +
+    `if [ ! -x xray ]; then ` +
+    `curl -sL -o x.zip "https://github.com/XTLS/Xray-core/releases/download/${v}/Xray-linux-64.zip" && ` +
+    `(command -v unzip >/dev/null 2>&1 && unzip -o x.zip || python3 -c "import zipfile;zipfile.ZipFile('x.zip').extractall('.')") && ` +
+    `rm -f x.zip && chmod +x xray; ` +
+    `fi && [ -x "${bp}" ]`;
+  const r1 = await sshExec(server, ensureBin, 180000);
+  if (r1.code !== 0) {
+    return {
+      ok: false,
+      error: `Не удалось установить Xray ${v} на ноду: ${r1.stderr || r1.stdout || 'нет ответа от ноды'}`,
     };
-
-    proc.stdout?.on('data', (data) => {
-      const text = data.toString();
-      appendLog(text);
-      if (!started && text.includes('started')) {
-        started = true;
-        processes.set(server.id, proc);
-        resolve({ ok: true });
-      }
-    });
-
-    proc.stderr?.on('data', (data) => {
-      const text = data.toString();
-      errorMsg += text;
-      appendLog(`[stderr] ${text}`);
-    });
-
-    proc.on('error', (err) => {
-      if (!started) resolve({ ok: false, error: err.message });
-      processes.delete(server.id);
-    });
-
-    proc.on('exit', (code) => {
-      processes.delete(server.id);
-      if (!started) {
-        resolve({ ok: false, error: errorMsg || `xray exited with code ${code}` });
-      }
-    });
-
-    // Give it 3 seconds to start
-    setTimeout(() => {
-      if (!started && !proc.killed) {
-        // Check if process is still alive — assume it started successfully
-        processes.set(server.id, proc);
-        appendLog('[xray] Process assumed running (timeout-based start)');
-        resolve({ ok: true });
-      } else if (!started) {
-        resolve({ ok: false, error: errorMsg || 'xray failed to start' });
-      }
-    }, 3000);
-  });
-}
-
-/**
- * Stop an xray process for a server.
- */
-export function stopServer(serverId: number): void {
-  const proc = processes.get(serverId);
-  if (proc) {
-    try {
-      proc.kill('SIGTERM');
-    } catch {
-      // ignore
-    }
-    processes.delete(serverId);
   }
+
+  // 2. Загружаем сгенерированный конфиг на ноду.
+  const config = JSON.stringify(generateXrayConfig(server, clients), null, 2);
+  const uploaded = await sshUpload(server, `${dir}/config.json`, config, 30000);
+  if (!uploaded) {
+    return { ok: false, error: 'Не удалось загрузить конфигурацию на ноду по SFTP' };
+  }
+
+  // 3. Запускаем Xray и проверяем, что процесс жив.
+  const startCmd =
+    `mkdir -p ${dir} && cd ${dir} && ` +
+    `nohup ${bp} run -c ${dir}/config.json > ${dir}/xray.log 2>&1 & ` +
+    `echo $! > ${dir}/xray.pid && sleep 1.5 && ` +
+    `(kill -0 $(cat ${dir}/xray.pid) 2>/dev/null && echo __OK__ || (echo __FAIL__; tail -n 40 ${dir}/xray.log))`;
+  const r2 = await sshExec(server, startCmd, 30000);
+  if (r2.stdout.includes('__OK__')) {
+    runningIds.add(server.id);
+    return { ok: true };
+  }
+  const detail = r2.stdout.includes('__FAIL__')
+    ? r2.stdout.replace(/__FAIL__/, '').trim()
+    : (r2.stderr || r2.stdout || 'Xray не запустился');
+  return { ok: false, error: `Xray не запустился на ноде: ${detail}` };
 }
 
-/**
- * Check if a server's xray process is running.
- */
+/** Остановить Xray на ноде. */
+export async function stopServer(server: ServerData): Promise<void> {
+  const dir = serverDir(server.id);
+  await sshExec(
+    server,
+    `if [ -f ${dir}/xray.pid ]; then kill $(cat ${dir}/xray.pid) 2>/dev/null; rm -f ${dir}/xray.pid; fi`,
+    10000,
+  );
+  runningIds.delete(server.id);
+}
+
+/** Запущен ли сервер (состояние, известное панели). */
 export function isServerRunning(serverId: number): boolean {
-  const proc = processes.get(serverId);
-  if (!proc) return false;
-  return !proc.killed && proc.exitCode === null;
+  return runningIds.has(serverId);
 }
 
-/**
- * Query traffic stats from a running xray instance via the API.
- */
-export function queryStats(apiPort: number): Record<string, { uplink: number; downlink: number }> {
-  const binaryPath = findAnyBinary();
-  if (!binaryPath) return {};
+/** Проверить, жив ли процесс на ноде, и снять статус при падении. */
+export async function verifyRunning(server: ServerData): Promise<boolean> {
+  if (!runningIds.has(server.id)) return false;
+  const dir = serverDir(server.id);
+  const r = await sshExec(server, `kill -0 $(cat ${dir}/xray.pid 2>/dev/null) 2>/dev/null && echo alive`, 10000);
+  if (!r.stdout.includes('alive')) {
+    runningIds.delete(server.id);
+    return false;
+  }
+  return true;
+}
 
+/** Перезапуск Xray на ноде. */
+export async function restartServer(
+  server: ServerData,
+  clients: ClientData[],
+): Promise<{ ok: boolean; error?: string }> {
+  await stopServer(server);
+  return startServer(server, clients);
+}
+
+/** Статистика трафика с API Xray на ноде. */
+export async function queryStats(
+  server: ServerData,
+): Promise<Record<string, { uplink: number; downlink: number }>> {
+  if (!runningIds.has(server.id)) return {};
+  const bp = binPath(server.xrayVersion);
+  const r = await sshExec(server, `${bp} api statsquery --server=127.0.0.1:${server.apiPort}`, 10000);
+  if (r.code !== 0 || !r.stdout.trim()) return {};
+  const stats: Record<string, { uplink: number; downlink: number }> = {};
   try {
-    const output = execSync(
-      `${binaryPath} api statsquery --server=127.0.0.1:${apiPort}`,
-      { timeout: 5000, encoding: 'utf-8' },
-    );
-
-    const parsed = JSON.parse(output);
-    const stats: Record<string, { uplink: number; downlink: number }> = {};
-
+    const parsed = JSON.parse(r.stdout);
     if (parsed.stat) {
       for (const s of parsed.stat) {
-        // name format: "user>>>>email>>>traffic>>>uplink" or ">>>traffic>>>downlink"
         const match = s.name?.match(/user>>>>(.+?)>>>traffic>>>(uplink|downlink)/);
         if (match) {
           const email = match[1];
@@ -253,29 +183,18 @@ export function queryStats(apiPort: number): Record<string, { uplink: number; do
         }
       }
     }
-
-    return stats;
   } catch {
     return {};
   }
+  return stats;
 }
 
-function findAnyBinary(): string | null {
-  const versions = listLocalVersions();
-  for (const v of versions) {
-    const p = getBinaryPath(v);
-    if (p) return p;
-  }
-  return null;
-}
-
-/**
- * Real TCP ping to a server's xray port.
- */
+/** Реальный TCP-пинг до порта Xray на ноде. */
 export function tcpPing(host: string, port: number, timeout = 3000): Promise<number> {
   return new Promise((resolve) => {
     const start = Date.now();
-    const socket = net.createConnection({ host, port }, () => {
+    const socket = new net.Socket();
+    socket.connect({ host, port }, () => {
       socket.end();
       resolve(Date.now() - start);
     });
@@ -287,49 +206,25 @@ export function tcpPing(host: string, port: number, timeout = 3000): Promise<num
   });
 }
 
-/**
- * Get accumulated logs for a server.
- */
-export function getServerLogs(serverId: number): string[] {
-  return logBuffers.get(serverId) || [];
+/** Логи Xray с ноды. */
+export async function getServerLogs(server: ServerData): Promise<string[]> {
+  const dir = serverDir(server.id);
+  const r = await sshExec(server, `tail -n 200 ${dir}/xray.log 2>/dev/null`, 10000);
+  if (!r.stdout) return [];
+  return r.stdout.split('\n').filter((l: string) => l.trim());
 }
 
-/**
- * Clear logs for a server.
- */
-export function clearServerLogs(serverId: number): void {
-  logBuffers.set(serverId, []);
+/** Очистить логи на ноде. */
+export async function clearServerLogs(server: ServerData): Promise<void> {
+  await sshExec(server, `echo "" > ${serverDir(server.id)}/xray.log`, 10000);
 }
 
-/**
- * Restart an xray process (stop + start).
- */
-export async function restartServer(
-  server: ServerData,
-  clients: ClientData[],
-): Promise<{ ok: boolean; error?: string }> {
-  stopServer(server.id);
-  return startServer(server, clients);
+/** Сгенерировать конфиг (для экспорта) — локально, без обращения к ноде. */
+export function getServerConfig(server: ServerData, clients: ClientData[]): string {
+  return JSON.stringify(generateXrayConfig(server, clients), null, 2);
 }
 
-/**
- * Get the config file path for a server (for export).
- */
-export function getServerConfigPath(server: ServerData, clients: ClientData[]): string {
-  return writeConfig(server, clients);
-}
-
-/**
- * Reset all process tracking (called on backend restart).
- */
+/** Сбросить отслеживание процессов при перезапуске бэкенда. */
 export function resetProcesses(): void {
-  for (const [id, proc] of processes) {
-    try {
-      proc.kill('SIGTERM');
-    } catch {
-      // ignore
-    }
-  }
-  processes.clear();
-  logBuffers.clear();
+  runningIds.clear();
 }

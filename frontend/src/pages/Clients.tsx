@@ -8,11 +8,11 @@ import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 const filterTabs: { key: ClientStatus | 'all'; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'active', label: 'Active' },
-  { key: 'disabled', label: 'Disabled' },
-  { key: 'expired', label: 'Expired' },
-  { key: 'limited', label: 'Limited' },
+  { key: 'all', label: 'Все' },
+  { key: 'active', label: 'Активные' },
+  { key: 'disabled', label: 'Отключённые' },
+  { key: 'expired', label: 'Истёкшие' },
+  { key: 'limited', label: 'Ограниченные' },
 ];
 
 export default function Clients() {
@@ -48,14 +48,14 @@ export default function Clients() {
       setShowAdd(false);
       setAddForm({ name: '', email: '', serverId: servers[0]?.id || 0, totalLimit: 0, expiryDate: '' });
       api.clients.list().then(setClients);
-      toastSuccess('Client added');
-    }).catch((e) => toastError(`Failed: ${(e as Error).message}`));
+      toastSuccess('Клиент добавлен');
+    }).catch((e) => toastError(`Ошибка: ${(e as Error).message}`));
   };
 
   const handleDelete = (id: number) => {
     api.clients.delete(id).then(() => {
       api.clients.list().then(setClients);
-      toastSuccess('Client deleted');
+      toastSuccess('Клиент удалён');
     });
   };
 
@@ -63,7 +63,7 @@ export default function Clients() {
     const newStatus = c.status === 'active' ? 'disabled' : 'active';
     api.clients.update(c.id, { status: newStatus }).then(() => {
       api.clients.list().then(setClients);
-      toastInfo(`${c.name} ${newStatus === 'active' ? 'enabled' : 'disabled'}`);
+      toastInfo(`${c.name} ${newStatus === 'active' ? 'включён' : 'отключён'}`);
     });
   };
 
@@ -77,14 +77,14 @@ export default function Clients() {
     api.clients.update(editClient.id, editForm).then(() => {
       setEditClient(null);
       api.clients.list().then(setClients);
-      toastSuccess('Client updated');
+      toastSuccess('Клиент обновлён');
     });
   };
 
   const handleResetStats = (id: number) => {
     api.clients.resetStats(id).then(() => {
       api.clients.list().then(setClients);
-      toastSuccess('Stats reset');
+      toastSuccess('Статистика сброшена');
     });
   };
 
@@ -110,12 +110,12 @@ export default function Clients() {
 
   const statusStyle = (s: ClientStatus) =>
     s === 'active'
-      ? { dot: 'bg-emerald-400', text: 'text-emerald-400', bg: 'bg-emerald-500/10', label: 'Active' }
+      ? { dot: 'bg-emerald-400', text: 'text-emerald-400', bg: 'bg-emerald-500/10', label: 'Активен' }
       : s === 'disabled'
-        ? { dot: 'bg-white/30', text: 'text-white/50', bg: 'bg-white/5', label: 'Disabled' }
+        ? { dot: 'bg-white/30', text: 'text-white/50', bg: 'bg-white/5', label: 'Отключён' }
         : s === 'expired'
-          ? { dot: 'bg-red-400', text: 'text-red-400', bg: 'bg-red-500/10', label: 'Expired' }
-          : { dot: 'bg-amber-400', text: 'text-amber-400', bg: 'bg-amber-500/10', label: 'Limited' };
+          ? { dot: 'bg-red-400', text: 'text-red-400', bg: 'bg-red-500/10', label: 'Истёк' }
+          : { dot: 'bg-amber-400', text: 'text-amber-400', bg: 'bg-amber-500/10', label: 'Ограничен' };
 
   const daysLeft = (date: string) => {
     const diff = new Date(date).getTime() - Date.now();
@@ -125,22 +125,22 @@ export default function Clients() {
   return (
     <div className="px-4 py-6 space-y-4 animate-fade-in">
       <div>
-        <h1 className="text-[1.6rem] font-bold font-display">Clients</h1>
-        <p className="text-sm text-white/40">{clients.length} total • {clients.filter(c => c.status === 'active').length} active</p>
+        <h1 className="text-[1.6rem] font-bold font-display">Клиенты</h1>
+        <p className="text-sm text-white/40">{clients.length} всего • {clients.filter(c => c.status === 'active').length} активны</p>
       </div>
 
-      {/* Search */}
+      {/* Поиск */}
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search clients..."
+          placeholder="Поиск клиентов..."
           className="glass-input w-full pl-10 pr-4 py-3 text-sm"
         />
       </div>
 
-      {/* Filter tabs */}
+      {/* Фильтры */}
       <div className="flex gap-2 overflow-x-auto">
         {filterTabs.map((t) => (
           <button
@@ -155,18 +155,18 @@ export default function Clients() {
         ))}
       </div>
 
-      {/* Empty state */}
+      {/* Пустое состояние */}
       {filtered.length === 0 && (
         <div className="glass-card p-8 text-center">
           <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center mx-auto mb-4">
             <Plus size={28} className="text-violet-400" />
           </div>
-          <p className="text-sm text-white/60 mb-1">{servers.length === 0 ? 'Add a server first' : 'No clients yet'}</p>
-          <p className="text-xs text-white/30">{servers.length === 0 ? 'You need a server before adding clients' : 'Add your first client'}</p>
+          <p className="text-sm text-white/60 mb-1">{servers.length === 0 ? 'Сначала добавьте ноду' : 'Клиентов пока нет'}</p>
+          <p className="text-xs text-white/30">{servers.length === 0 ? 'Нужна нода, прежде чем добавлять клиентов' : 'Добавьте первого клиента'}</p>
         </div>
       )}
 
-      {/* Client cards */}
+      {/* Карточки клиентов */}
       {filtered.map((c) => {
         const st = statusStyle(c.status);
         const used = c.upload + c.download;
@@ -191,7 +191,7 @@ export default function Clients() {
               </span>
             </div>
 
-            {/* Server + protocol */}
+            {/* Сервер и протокол */}
             <div className="flex items-center gap-2 mb-3 flex-wrap">
               {(c.shareUrls || [{ protocol: 'vless', url: c.vlessUrl }]).map((su, idx) => {
                 const meta = PROTOCOL_META[su.protocol] || { name: su.protocol, color: '#888' };
@@ -205,7 +205,7 @@ export default function Clients() {
                   </span>
                 );
               })}
-              <span className="text-xs text-white/40">on {c.serverName}</span>
+              <span className="text-xs text-white/40">на {c.serverName}</span>
               {server && (
                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${server.status === 'running' ? 'text-emerald-400 bg-emerald-500/10' : 'text-white/30 bg-white/5'}`}>
                   {server.status === 'running' ? '●' : '○'}
@@ -213,12 +213,12 @@ export default function Clients() {
               )}
             </div>
 
-            {/* Data usage */}
+            {/* Трафик */}
             <div className="mb-3">
               <div className="flex justify-between text-[10px] mb-1">
-                <span className="text-white/40">Data used</span>
+                <span className="text-white/40">Использовано</span>
                 <span className="text-white/60">
-                  {used.toFixed(2)} GB{c.totalLimit > 0 ? ` / ${c.totalLimit} GB` : ' ∞'}
+                  {used.toFixed(2)} ГБ{c.totalLimit > 0 ? ` / ${c.totalLimit} ГБ` : ' ∞'}
                 </span>
               </div>
               {c.totalLimit > 0 && (
@@ -231,12 +231,12 @@ export default function Clients() {
               )}
             </div>
 
-            {/* Footer */}
+            {/* Подвал */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-[10px] text-white/30">
                 <span className="flex items-center gap-1">
                   <Clock size={11} />
-                  {dl > 0 ? `${dl}d left` : 'expired'}
+                  {dl > 0 ? `${dl} дн. осталось` : 'истёк'}
                 </span>
                 <span className="flex items-center gap-1">
                   <Wifi size={11} />
@@ -247,28 +247,28 @@ export default function Clients() {
                 <button
                   onClick={() => setQrClient(c)}
                   className="text-white/30 hover:text-violet-400 transition-colors"
-                  title="Show QR code"
+                  title="Показать QR-код"
                 >
                   <QrCode size={14} />
                 </button>
                 <button
                   onClick={() => copyUrl(c.vlessUrl, c.id)}
                   className="text-white/30 hover:text-violet-400 transition-colors"
-                  title="Copy VLESS URL"
+                  title="Копировать ссылку"
                 >
                   {copied === c.id ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                 </button>
                 <button
                   onClick={() => handleEdit(c)}
                   className="text-white/30 hover:text-violet-400 transition-colors"
-                  title="Edit client"
+                  title="Изменить клиента"
                 >
                   <Pencil size={14} />
                 </button>
                 <button
                   onClick={() => setConfirmReset(c)}
                   className="text-white/30 hover:text-violet-400 transition-colors"
-                  title="Reset traffic stats"
+                  title="Сбросить статистику"
                 >
                   <RotateCcw size={14} />
                 </button>
@@ -276,7 +276,7 @@ export default function Clients() {
                   onClick={() => toggleStatus(c)}
                   className={`text-[10px] px-2 py-1 rounded-lg ${c.status === 'active' ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}
                 >
-                  {c.status === 'active' ? 'Disable' : 'Enable'}
+                  {c.status === 'active' ? 'Откл.' : 'Вкл.'}
                 </button>
                 <button
                   onClick={() => setConfirmDelete(c)}
@@ -299,7 +299,7 @@ export default function Clients() {
         <Plus size={24} />
       </button>
 
-      {/* Add Client Modal */}
+      {/* Добавление клиента */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowAdd(false)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -308,13 +308,13 @@ export default function Clients() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">Add VLESS Client</h2>
+              <h2 className="text-lg font-bold">Добавить клиента</h2>
               <button onClick={() => setShowAdd(false)} className="text-white/40">
                 <X size={20} />
               </button>
             </div>
             <input
-              placeholder="Name"
+              placeholder="Имя"
               value={addForm.name}
               onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
               className="glass-input w-full px-4 py-3 text-sm"
@@ -349,7 +349,7 @@ export default function Clients() {
             <div className="grid grid-cols-2 gap-3">
               <input
                 type="number"
-                placeholder="Data limit (GB, 0=∞)"
+                placeholder="Лимит (ГБ, 0=∞)"
                 value={addForm.totalLimit}
                 onChange={(e) => setAddForm({ ...addForm, totalLimit: Number(e.target.value) })}
                 className="glass-input w-full px-4 py-3 text-sm"
@@ -366,13 +366,13 @@ export default function Clients() {
               disabled={!addForm.name || !addForm.email || !addForm.serverId}
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition-transform"
             >
-              Add Client
+              Добавить клиента
             </button>
           </div>
         </div>
       )}
 
-      {/* QR Code Modal */}
+      {/* QR-код */}
       {qrClient && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setQrClient(null)}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
@@ -392,11 +392,11 @@ export default function Clients() {
               onClick={() => copyUrl(qrClient.vlessUrl, qrClient.id)}
               className="w-full mt-4 py-3 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
-              {copied === qrClient.id ? <Check size={14} /> : <Copy size={14} />} Copy URL
+              {copied === qrClient.id ? <Check size={14} /> : <Copy size={14} />} Копировать ссылку
             </button>
             {(qrClient.shareUrls || []).length > 1 && (
               <div className="mt-4 space-y-1.5">
-                <p className="text-[10px] text-white/30 mb-1">All protocol URLs:</p>
+                <p className="text-[10px] text-white/30 mb-1">Все ссылки протоколов:</p>
                 {qrClient.shareUrls!.filter((su) => su.url && su.url !== qrClient.vlessUrl).map((su, idx) => {
                   const meta = PROTOCOL_META[su.protocol] || { name: su.protocol, color: '#888' };
                   return (
@@ -419,12 +419,13 @@ export default function Clients() {
         </div>
       )}
 
-      {/* Delete confirmation */}
+      {/* Подтверждение удаления */}
       <ConfirmDialog
         open={!!confirmDelete}
-        title="Delete Client"
-        message={`Delete "${confirmDelete?.name}"? This will revoke their VPN access immediately. This cannot be undone.`}
-        confirmLabel="Delete"
+        title="Удалить клиента"
+        message={`Удалить «${confirmDelete?.name}»? Доступ к VPN будет немедленно отозван. Действие необратимо.`}
+        confirmLabel="Удалить"
+        cancelLabel="Отмена"
         variant="danger"
         onConfirm={() => {
           if (confirmDelete) handleDelete(confirmDelete.id);
@@ -433,12 +434,13 @@ export default function Clients() {
         onCancel={() => setConfirmDelete(null)}
       />
 
-      {/* Reset stats confirmation */}
+      {/* Подтверждение сброса статистики */}
       <ConfirmDialog
         open={!!confirmReset}
-        title="Reset Traffic Stats"
-        message={`Reset all traffic statistics for "${confirmReset?.name}"? Upload and download counters will be set to zero.`}
-        confirmLabel="Reset"
+        title="Сбросить статистику"
+        message={`Сбросить всю статистику трафика для «${confirmReset?.name}»? Счётчики загрузки и отдачи обнулятся.`}
+        confirmLabel="Сбросить"
+        cancelLabel="Отмена"
         onConfirm={() => {
           if (confirmReset) handleResetStats(confirmReset.id);
           setConfirmReset(null);
@@ -446,7 +448,7 @@ export default function Clients() {
         onCancel={() => setConfirmReset(null)}
       />
 
-      {/* Edit Client Modal */}
+      {/* Редактирование клиента */}
       {editClient && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setEditClient(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -455,13 +457,13 @@ export default function Clients() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">Edit Client</h2>
+              <h2 className="text-lg font-bold">Изменить клиента</h2>
               <button onClick={() => setEditClient(null)} className="text-white/40">
                 <X size={20} />
               </button>
             </div>
             <input
-              placeholder="Name"
+              placeholder="Имя"
               value={editForm.name}
               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
               className="glass-input w-full px-4 py-3 text-sm"
@@ -475,7 +477,7 @@ export default function Clients() {
             <div className="grid grid-cols-2 gap-3">
               <input
                 type="number"
-                placeholder="Data limit (GB, 0=∞)"
+                placeholder="Лимит (ГБ, 0=∞)"
                 value={editForm.totalLimit}
                 onChange={(e) => setEditForm({ ...editForm, totalLimit: Number(e.target.value) })}
                 className="glass-input w-full px-4 py-3 text-sm"
@@ -492,7 +494,7 @@ export default function Clients() {
               disabled={!editForm.name || !editForm.email}
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition-transform"
             >
-              Save Changes
+              Сохранить
             </button>
           </div>
         </div>

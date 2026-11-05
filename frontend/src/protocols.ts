@@ -1,5 +1,5 @@
-// Comprehensive Xray-core protocol catalog — single source of truth for the UI.
-// Based on https://xtls.github.io/en/config/ documentation.
+// Каталог протоколов Xray-core — единый источник истины для интерфейса.
+// На основе документации https://xtls.github.io/en/config/
 
 export type ProtocolType = 'vless' | 'vmess' | 'trojan' | 'shadowsocks' | 'socks' | 'http' | 'dokodemo-door';
 export type NetworkType = 'tcp' | 'kcp' | 'ws' | 'http' | 'grpc' | 'quic';
@@ -43,13 +43,13 @@ export interface SecurityDef {
   fields: FieldDef[];
 }
 
-// ── Protocols ──────────────────────────────────────────────────────────
+// ── Протоколы ──────────────────────────────────────────────────────────
 
 export const PROTOCOLS: ProtocolDef[] = [
   {
     type: 'vless',
     label: 'VLESS',
-    description: 'Stateless lightweight protocol. Supports XTLS Vision flow and Reality.',
+    description: 'Лёгкий протокол без состояния. Поддерживает XTLS Vision и Reality.',
     color: '#8B5CF6',
     supportedNetworks: ['tcp', 'kcp', 'ws', 'http', 'grpc', 'quic'],
     supportedSecurity: ['none', 'tls', 'reality'],
@@ -57,21 +57,21 @@ export const PROTOCOLS: ProtocolDef[] = [
     fields: [
       {
         key: 'flow',
-        label: 'Default Flow',
+        label: 'Flow по умолчанию',
         type: 'select',
         default: 'xtls-rprx-vision',
         options: [
-          { value: '', label: 'none (standard TLS)' },
+          { value: '', label: 'нет (стандартный TLS)' },
           { value: 'xtls-rprx-vision', label: 'xtls-rprx-vision (XTLS)' },
         ],
-        description: 'Flow control. Vision requires TCP + TLS/Reality.',
+        description: 'Управление потоком. Vision требует TCP + TLS/Reality.',
       },
     ],
   },
   {
     type: 'vmess',
     label: 'VMess',
-    description: 'Encrypted transport protocol with AEAD. Depends on system time sync.',
+    description: 'Шифрованный транспортный протокол с AEAD. Зависит от синхронизации времени.',
     color: '#06B6D4',
     supportedNetworks: ['tcp', 'kcp', 'ws', 'http', 'grpc', 'quic'],
     supportedSecurity: ['none', 'tls', 'reality'],
@@ -81,7 +81,7 @@ export const PROTOCOLS: ProtocolDef[] = [
   {
     type: 'trojan',
     label: 'Trojan',
-    description: 'TLS-based protocol with password authentication. Mimics HTTPS traffic.',
+    description: 'TLS-протокол с парольной аутентификацией. Имитирует HTTPS-трафик.',
     color: '#F59E0B',
     supportedNetworks: ['tcp', 'kcp', 'ws', 'http', 'grpc', 'quic'],
     supportedSecurity: ['none', 'tls', 'reality'],
@@ -91,7 +91,7 @@ export const PROTOCOLS: ProtocolDef[] = [
   {
     type: 'shadowsocks',
     label: 'Shadowsocks',
-    description: 'Lightweight encrypted proxy with various ciphers.',
+    description: 'Лёгкий шифрованный прокси с различными шифрами.',
     color: '#10B981',
     supportedNetworks: ['tcp', 'kcp', 'ws', 'http', 'grpc', 'quic'],
     supportedSecurity: ['none', 'tls'],
@@ -99,7 +99,7 @@ export const PROTOCOLS: ProtocolDef[] = [
     fields: [
       {
         key: 'method',
-        label: 'Encryption Method',
+        label: 'Метод шифрования',
         type: 'select',
         default: 'aes-256-gcm',
         options: [
@@ -109,22 +109,22 @@ export const PROTOCOLS: ProtocolDef[] = [
           { value: '2022-blake3-aes-128-gcm', label: '2022-blake3-aes-128-gcm' },
           { value: '2022-blake3-aes-256-gcm', label: '2022-blake3-aes-256-gcm' },
           { value: '2022-blake3-chacha20-poly1305', label: '2022-blake3-chacha20-poly1305' },
-          { value: 'none', label: 'none (no encryption)' },
+          { value: 'none', label: 'none (без шифрования)' },
         ],
       },
       {
         key: 'password',
-        label: 'Password',
+        label: 'Пароль',
         type: 'text',
         default: '',
-        placeholder: 'Leave empty to auto-generate',
+        placeholder: 'Оставьте пустым для авто-генерации',
       },
     ],
   },
   {
     type: 'socks',
     label: 'SOCKS',
-    description: 'SOCKS5 proxy protocol with optional authentication.',
+    description: 'SOCKS5-прокси с опциональной аутентификацией.',
     color: '#EF4444',
     supportedNetworks: ['tcp', 'ws', 'http'],
     supportedSecurity: ['none', 'tls'],
@@ -132,26 +132,26 @@ export const PROTOCOLS: ProtocolDef[] = [
     fields: [
       {
         key: 'auth',
-        label: 'Authentication',
+        label: 'Аутентификация',
         type: 'select',
         default: 'noauth',
         options: [
-          { value: 'noauth', label: 'No Authentication' },
-          { value: 'password', label: 'Password (use client email/uuid)' },
+          { value: 'noauth', label: 'Без аутентификации' },
+          { value: 'password', label: 'Пароль (email/uuid клиента)' },
         ],
       },
       {
         key: 'udp',
-        label: 'UDP Support',
+        label: 'Поддержка UDP',
         type: 'boolean',
         default: true,
       },
       {
         key: 'ip',
-        label: 'IP (for UDP)',
+        label: 'IP (для UDP)',
         type: 'text',
         default: '',
-        placeholder: 'e.g. 127.0.0.1',
+        placeholder: 'напр. 127.0.0.1',
         showIf: { field: 'udp', value: true },
       },
     ],
@@ -159,7 +159,7 @@ export const PROTOCOLS: ProtocolDef[] = [
   {
     type: 'http',
     label: 'HTTP',
-    description: 'HTTP/HTTPS proxy protocol with basic authentication.',
+    description: 'HTTP/HTTPS-прокси с базовой аутентификацией.',
     color: '#EC4899',
     supportedNetworks: ['tcp'],
     supportedSecurity: ['none', 'tls'],
@@ -167,7 +167,7 @@ export const PROTOCOLS: ProtocolDef[] = [
     fields: [
       {
         key: 'transparent',
-        label: 'Transparent Proxy',
+        label: 'Прозрачный прокси',
         type: 'boolean',
         default: false,
       },
@@ -176,7 +176,7 @@ export const PROTOCOLS: ProtocolDef[] = [
   {
     type: 'dokodemo-door',
     label: 'Dokodemo-door',
-    description: 'Any-door: forwards traffic to a specified address/port.',
+    description: 'Любая-дверь: перенаправляет трафик на указанный адрес/порт.',
     color: '#6366F1',
     supportedNetworks: ['tcp'],
     supportedSecurity: ['none', 'tls'],
@@ -184,31 +184,31 @@ export const PROTOCOLS: ProtocolDef[] = [
     fields: [
       {
         key: 'address',
-        label: 'Target Address',
+        label: 'Адрес назначения',
         type: 'text',
         default: '',
-        placeholder: 'e.g. 127.0.0.1',
+        placeholder: 'напр. 127.0.0.1',
       },
       {
         key: 'targetPort',
-        label: 'Target Port',
+        label: 'Порт назначения',
         type: 'number',
         default: 80,
       },
       {
         key: 'followRedirect',
-        label: 'Follow Redirect',
+        label: 'Следовать перенаправлению',
         type: 'boolean',
         default: false,
       },
       {
         key: 'networkMode',
-        label: 'Network Mode',
+        label: 'Сетевой режим',
         type: 'select',
         default: 'tcp,udp',
         options: [
-          { value: 'tcp', label: 'TCP only' },
-          { value: 'udp', label: 'UDP only' },
+          { value: 'tcp', label: 'Только TCP' },
+          { value: 'udp', label: 'Только UDP' },
           { value: 'tcp,udp', label: 'TCP + UDP' },
         ],
       },
@@ -216,37 +216,37 @@ export const PROTOCOLS: ProtocolDef[] = [
   },
 ];
 
-// ── Networks / Transports ──────────────────────────────────────────────
+// ── Транспорты ─────────────────────────────────────────────────────────
 
 export const NETWORKS: NetworkDef[] = [
   {
     type: 'tcp',
     label: 'TCP (RAW)',
-    description: 'Raw TCP transport, optionally with HTTP header obfuscation.',
+    description: 'Сырой TCP, опционально с маскировкой HTTP-заголовков.',
     fields: [
       {
         key: 'headerType',
-        label: 'Header Type',
+        label: 'Тип заголовка',
         type: 'select',
         default: 'none',
         options: [
-          { value: 'none', label: 'None (raw TCP)' },
-          { value: 'http', label: 'HTTP Camouflage' },
+          { value: 'none', label: 'Нет (сырой TCP)' },
+          { value: 'http', label: 'Маскировка HTTP' },
         ],
       },
       {
         key: 'requestPath',
-        label: 'Request Path',
+        label: 'Путь запроса',
         type: 'text',
         default: '/',
         showIf: { field: 'headerType', value: 'http' },
       },
       {
         key: 'requestHost',
-        label: 'Request Host(s)',
+        label: 'Host запроса',
         type: 'list',
         default: '',
-        placeholder: 'comma-separated hosts',
+        placeholder: 'хосты через запятую',
         showIf: { field: 'headerType', value: 'http' },
       },
     ],
@@ -254,16 +254,16 @@ export const NETWORKS: NetworkDef[] = [
   {
     type: 'kcp',
     label: 'mKCP (KCP)',
-    description: 'UDP-based reliable transport with obfuscation headers.',
+    description: 'UDP-транспорт с маскировкой заголовков.',
     fields: [
       {
         key: 'headerType',
-        label: 'Header Type (Obfuscation)',
+        label: 'Тип заголовка (маскировка)',
         type: 'select',
         default: 'none',
         options: [
-          { value: 'none', label: 'None' },
-          { value: 'srtp', label: 'SRTP (Video Call)' },
+          { value: 'none', label: 'Нет' },
+          { value: 'srtp', label: 'SRTP (видеозвонок)' },
           { value: 'utp', label: 'uTP (BitTorrent)' },
           { value: 'wechat-video', label: 'WeChat Video' },
           { value: 'dtls', label: 'DTLS' },
@@ -271,74 +271,74 @@ export const NETWORKS: NetworkDef[] = [
         ],
       },
       { key: 'mtu', label: 'MTU', type: 'number', default: 1350 },
-      { key: 'tti', label: 'TTI (ms)', type: 'number', default: 20 },
-      { key: 'uplinkCapacity', label: 'Uplink Capacity (MB/s)', type: 'number', default: 5 },
-      { key: 'downlinkCapacity', label: 'Downlink Capacity (MB/s)', type: 'number', default: 20 },
-      { key: 'congestion', label: 'Congestion Control', type: 'boolean', default: false },
-      { key: 'readBufferSize', label: 'Read Buffer (MB)', type: 'number', default: 2 },
-      { key: 'writeBufferSize', label: 'Write Buffer (MB)', type: 'number', default: 2 },
+      { key: 'tti', label: 'TTI (мс)', type: 'number', default: 20 },
+      { key: 'uplinkCapacity', label: 'Скорость отдачи (МБ/с)', type: 'number', default: 5 },
+      { key: 'downlinkCapacity', label: 'Скорость загрузки (МБ/с)', type: 'number', default: 20 },
+      { key: 'congestion', label: 'Контроль перегрузки', type: 'boolean', default: false },
+      { key: 'readBufferSize', label: 'Буфер чтения (МБ)', type: 'number', default: 2 },
+      { key: 'writeBufferSize', label: 'Буфер записи (МБ)', type: 'number', default: 2 },
     ],
   },
   {
     type: 'ws',
     label: 'WebSocket',
-    description: 'WebSocket transport, works behind CDN and reverse proxies.',
+    description: 'Транспорт WebSocket, работает за CDN и обратными прокси.',
     fields: [
-      { key: 'path', label: 'Path', type: 'text', default: '/', placeholder: '/' },
+      { key: 'path', label: 'Путь', type: 'text', default: '/', placeholder: '/' },
       { key: 'host', label: 'Host', type: 'text', default: '', placeholder: 'domain.com' },
     ],
   },
   {
     type: 'http',
     label: 'HTTP/2',
-    description: 'HTTP/2 transport with TLS. Supports multiplexing.',
+    description: 'Транспорт HTTP/2 с TLS. Поддерживает мультиплексирование.',
     fields: [
-      { key: 'path', label: 'Path', type: 'text', default: '/', placeholder: '/' },
-      { key: 'host', label: 'Host (domains)', type: 'list', default: '', placeholder: 'comma-separated domains' },
-      { key: 'readBufferSize', label: 'Read Buffer (MB)', type: 'number', default: 0, description: '0 = default' },
-      { key: 'writeBufferSize', label: 'Write Buffer (MB)', type: 'number', default: 0, description: '0 = default' },
+      { key: 'path', label: 'Путь', type: 'text', default: '/', placeholder: '/' },
+      { key: 'host', label: 'Host (домены)', type: 'list', default: '', placeholder: 'домены через запятую' },
+      { key: 'readBufferSize', label: 'Буфер чтения (МБ)', type: 'number', default: 0, description: '0 = по умолчанию' },
+      { key: 'writeBufferSize', label: 'Буфер записи (МБ)', type: 'number', default: 0, description: '0 = по умолчанию' },
     ],
   },
   {
     type: 'grpc',
     label: 'gRPC',
-    description: 'gRPC transport. Supports multiplexing and streaming.',
+    description: 'Транспорт gRPC. Поддерживает мультиплексирование и стриминг.',
     fields: [
-      { key: 'serviceName', label: 'Service Name', type: 'text', default: '', placeholder: 'e.g. GunService' },
-      { key: 'multiMode', label: 'Multi-Mode', type: 'boolean', default: false, description: 'Enables gRPC over h2 (experimental)' },
+      { key: 'serviceName', label: 'Имя сервиса', type: 'text', default: '', placeholder: 'напр. GunService' },
+      { key: 'multiMode', label: 'Multi-Mode', type: 'boolean', default: false, description: 'gRPC over h2 (эксперимент)' },
     ],
   },
   {
     type: 'quic',
     label: 'QUIC',
-    description: 'UDP-based transport with built-in encryption.',
+    description: 'UDP-транспорт со встроенным шифрованием.',
     fields: [
       {
         key: 'security',
-        label: 'Security',
+        label: 'Шифрование',
         type: 'select',
         default: 'none',
         options: [
-          { value: 'none', label: 'None' },
+          { value: 'none', label: 'Нет' },
           { value: 'aes-128-gcm', label: 'AES-128-GCM' },
           { value: 'chacha20-poly1305', label: 'ChaCha20-Poly1305' },
         ],
       },
       {
         key: 'key',
-        label: 'Key',
+        label: 'Ключ',
         type: 'text',
         default: '',
-        placeholder: 'Encryption key',
+        placeholder: 'Ключ шифрования',
         showIf: { field: 'security', value: 'aes-128-gcm' },
       },
       {
         key: 'headerType',
-        label: 'Header Type (Obfuscation)',
+        label: 'Тип заголовка (маскировка)',
         type: 'select',
         default: 'none',
         options: [
-          { value: 'none', label: 'None' },
+          { value: 'none', label: 'Нет' },
           { value: 'srtp', label: 'SRTP' },
           { value: 'utp', label: 'uTP' },
           { value: 'wechat-video', label: 'WeChat Video' },
@@ -350,19 +350,19 @@ export const NETWORKS: NetworkDef[] = [
   },
 ];
 
-// ── Security ───────────────────────────────────────────────────────────
+// ── Безопасность ──────────────────────────────────────────────────────
 
 export const SECURITY: SecurityDef[] = [
   {
     type: 'none',
-    label: 'None',
-    description: 'No transport-layer encryption.',
+    label: 'Нет',
+    description: 'Без шифрования транспортного уровня.',
     fields: [],
   },
   {
     type: 'tls',
     label: 'TLS',
-    description: 'Standard TLS encryption. Requires certificate.',
+    description: 'Стандартное TLS-шифрование. Требуется сертификат.',
     fields: [
       { key: 'serverName', label: 'Server Name (SNI)', type: 'text', default: '', placeholder: 'domain.com' },
       {
@@ -370,13 +370,13 @@ export const SECURITY: SecurityDef[] = [
         label: 'ALPN',
         type: 'list',
         default: 'h2,http/1.1',
-        placeholder: 'comma-separated (h2, http/1.1)',
+        placeholder: 'через запятую (h2, http/1.1)',
       },
-      { key: 'allowInsecure', label: 'Allow Insecure', type: 'boolean', default: false },
-      { key: 'rejectUnknownSNI', label: 'Reject Unknown SNI', type: 'boolean', default: false },
+      { key: 'allowInsecure', label: 'Разрешить небезопасные', type: 'boolean', default: false },
+      { key: 'rejectUnknownSNI', label: 'Отклонять неизвестный SNI', type: 'boolean', default: false },
       {
         key: 'minVersion',
-        label: 'Min TLS Version',
+        label: 'Мин. версия TLS',
         type: 'select',
         default: '1.2',
         options: [
@@ -388,7 +388,7 @@ export const SECURITY: SecurityDef[] = [
       },
       {
         key: 'maxVersion',
-        label: 'Max TLS Version',
+        label: 'Макс. версия TLS',
         type: 'select',
         default: '1.3',
         options: [
@@ -398,20 +398,20 @@ export const SECURITY: SecurityDef[] = [
           { value: '1.3', label: 'TLS 1.3' },
         ],
       },
-      { key: 'certificateFile', label: 'Certificate File Path', type: 'text', default: '', placeholder: '/path/to/fullchain.pem' },
-      { key: 'keyFile', label: 'Key File Path', type: 'text', default: '', placeholder: '/path/to/privkey.pem' },
-      { key: 'certificateText', label: 'Certificate (inline)', type: 'list', default: '', placeholder: 'paste PEM content', description: 'Use file paths OR inline certificate' },
+      { key: 'certificateFile', label: 'Файл сертификата', type: 'text', default: '', placeholder: '/path/to/fullchain.pem' },
+      { key: 'keyFile', label: 'Файл ключа', type: 'text', default: '', placeholder: '/path/to/privkey.pem' },
+      { key: 'certificateText', label: 'Сертификат (встроенный)', type: 'list', default: '', placeholder: 'вставьте PEM-содержимое', description: 'Используйте файл ИЛИ встроенный сертификат' },
     ],
   },
   {
     type: 'reality',
     label: 'Reality',
-    description: 'XTLS Reality: steals handshake from a real TLS site. No certificate needed.',
+    description: 'XTLS Reality: заимствует рукопожатие реального TLS-сайта. Сертификат не нужен.',
     fields: [
-      { key: 'dest', label: 'Dest (camouflage target)', type: 'text', default: 'www.microsoft.com:443' },
-      { key: 'serverNames', label: 'Server Names (SNI)', type: 'list', default: 'www.microsoft.com', placeholder: 'comma-separated SNI hosts' },
-      { key: 'privateKey', label: 'Private Key', type: 'text', default: '', description: 'Auto-generated if empty' },
-      { key: 'shortIds', label: 'Short IDs', type: 'list', default: '', placeholder: 'comma-separated hex IDs (auto-generated if empty)' },
+      { key: 'dest', label: 'Dest (цель маскировки)', type: 'text', default: 'www.microsoft.com:443' },
+      { key: 'serverNames', label: 'Server Names (SNI)', type: 'list', default: 'www.microsoft.com', placeholder: 'SNI-хосты через запятую' },
+      { key: 'privateKey', label: 'Приватный ключ', type: 'text', default: '', description: 'Авто-генерация, если пусто' },
+      { key: 'shortIds', label: 'Short IDs', type: 'list', default: '', placeholder: 'hex ID через запятую (авто-генерация, если пусто)' },
       {
         key: 'fingerprint',
         label: 'Fingerprint (uTLS)',
@@ -422,18 +422,18 @@ export const SECURITY: SecurityDef[] = [
           { value: 'firefox', label: 'Firefox' },
           { value: 'safari', label: 'Safari' },
           { value: 'edge', label: 'Edge' },
-          { value: 'random', label: 'Random' },
-          { value: 'randomized', label: 'Randomized' },
+          { value: 'random', label: 'Случайный' },
+          { value: 'randomized', label: 'Рандомизированный' },
         ],
       },
-      { key: 'xver', label: 'Xver (PROXY protocol version)', type: 'number', default: 0 },
-      { key: 'show', label: 'Show (debug)', type: 'boolean', default: false },
-      { key: 'maxTimeDiff', label: 'Max Time Diff (ms)', type: 'number', default: 0, description: '0 = disabled' },
+      { key: 'xver', label: 'Xver (версия PROXY protocol)', type: 'number', default: 0 },
+      { key: 'show', label: 'Показать (отладка)', type: 'boolean', default: false },
+      { key: 'maxTimeDiff', label: 'Макс. разница времени (мс)', type: 'number', default: 0, description: '0 = отключено' },
     ],
   },
 ];
 
-// ── Lookup helpers ─────────────────────────────────────────────────────
+// ── Помощники поиска ───────────────────────────────────────────────────
 
 export const getProtocol = (t: ProtocolType) => PROTOCOLS.find((p) => p.type === t)!;
 export const getNetwork = (t: NetworkType) => NETWORKS.find((n) => n.type === t)!;
@@ -449,7 +449,7 @@ export const PROTOCOL_META: Record<string, { name: string; color: string }> = {
   'dokodemo-door': { name: 'Dokodemo-door', color: '#6366F1' },
 };
 
-// Build default settings object from field definitions
+// Построить объект настроек по умолчанию из определений полей
 export function buildDefaults(fields: FieldDef[]): Record<string, any> {
   const result: Record<string, any> = {};
   for (const f of fields) {
@@ -473,7 +473,7 @@ export function buildInboundDefaults(protocol: ProtocolType): {
   };
 }
 
-// REALITY SNI targets commonly used for camouflage
+// SNI-цели Reality, обычно используемые для маскировки
 export const REALITY_TARGETS = [
   { dest: 'www.microsoft.com:443', sni: 'www.microsoft.com' },
   { dest: 'www.apple.com:443', sni: 'www.apple.com' },

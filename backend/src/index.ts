@@ -9,16 +9,17 @@ import {
   stopServer,
   restartServer,
   isServerRunning,
+  verifyRunning,
   queryStats,
   tcpPing,
   resetProcesses,
   getServerLogs,
   clearServerLogs,
-  getServerConfigPath,
+  getServerConfig,
+  testConnection,
 } from './xray/manager';
-import { readFileSync } from 'fs';
 import { generateShareUrl } from './xray/share';
-import type { ServerData, ClientData, InboundData } from './store';
+import type { ServerData, ClientData } from './store';
 
 const app = express();
 app.use(cors());
@@ -29,17 +30,27 @@ const PORT = Number(process.env.PORT) || 3001;
 resetProcesses();
 store.resetStatuses();
 
-// Periodically poll stats from running servers
+// Периодически опрашиваем статистику с запущенных нод.
 setInterval(async () => {
   for (const server of store.servers) {
     if (isServerRunning(server.id)) {
-      const stats = queryStats(server.apiPort);
+      const stats = await queryStats(server);
       if (Object.keys(stats).length > 0) {
         store.updateTrafficStats(stats);
       }
     }
   }
 }, 10000);
+
+// Периодически проверяем, живы ли процессы на нодах.
+setInterval(async () => {
+  for (const server of store.servers) {
+    if (isServerRunning(server.id)) {
+      const alive = await verifyRunning(server);
+      if (!alive) store.updateServer(server.id, { status: 'stopped' });
+    }
+  }
+}, 20000);
 
 setInterval(() => store.pushTrafficPoint(), 3600000);
 store.pushTrafficPoint();
@@ -55,7 +66,6 @@ function clientWithUrls(c: ClientData): ClientData & { vlessUrl: string; shareUr
     .filter((inbound) => inbound.protocol !== 'dokodemo-door')
     .map((inbound) => {
       const ss = { ...inbound.securitySettings };
-      // Inject the public key for VLESS+Reality URLs
       if (inbound.security === 'reality' && server.realityPublicKey) {
         ss._publicKey = server.realityPublicKey;
       }
@@ -75,9 +85,7 @@ function clientWithUrls(c: ClientData): ClientData & { vlessUrl: string; shareUr
     })
     .filter((s) => s.url);
 
-  // Primary URL for backward compat (first non-empty)
   const primary = shareUrls[0]?.url || '';
-
   return { ...c, vlessUrl: primary, shareUrls };
 }
 
@@ -89,12 +97,45 @@ function serverWithRunning(s: ServerData): ServerData {
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
-// Xray versions
+// Проверка SSH-соединения с нодой (до создания сервера)
+app.post('/api/servers/test', async (req, res) => {
+  const { host, sshPort, sshUser, sshAuthType, sshPrivateKey, sshPassword } = req.body;
+  if (!host) return res.status(400).json({ error: 'Укажите хост ноды' });
+  const probe: ServerData = {
+    id: 0,
+    name: '',
+    host,
+    port: 0,
+    apiPort: 0,
+    location: '',
+    flag: '',
+    status: 'stopped',
+    xrayVersion: '',
+    cpu: 0,
+    ram: 0,
+    uptime: 0,
+    clientCount: 0,
+    totalUpload: 0,
+    totalDownload: 0,
+    uploadSpeed: 0,
+    downloadSpeed: 0,
+    createdAt: '',
+    inbounds: [],
+    sshPort: Number(sshPort) || 22,
+    sshUser: sshUser || 'root',
+    sshAuthType: sshAuthType || 'password',
+    sshPrivateKey: sshPrivateKey || '',
+    sshPassword: sshPassword || '',
+  };
+  const result = await testConnection(probe);
+  res.json(result);
+});
+
+// Версии Xray
 app.get('/api/xray/versions', async (_req, res) => {
   try {
     const remote = await listAvailableVersions();
-    const local = listLocalVersions();
-    res.json({ available: remote, downloaded: local, default: store.DEFAULT_XRAY_VERSION });
+    res.json({ available: remote, downloaded: listLocalVersions(), default: store.DEFAULT_XRAY_VERSION });
   } catch {
     res.json({ available: listLocalVersions(), downloaded: listLocalVersions(), default: store.DEFAULT_XRAY_VERSION });
   }
@@ -102,7 +143,7 @@ app.get('/api/xray/versions', async (_req, res) => {
 
 app.post('/api/xray/download', async (req, res) => {
   const { version } = req.body;
-  if (!version) return res.status(400).json({ error: 'Version required' });
+  if (!version) return res.status(400).json({ error: 'Укажите версию' });
   try {
     await downloadVersion(version);
     res.json({ success: true, version });
@@ -111,7 +152,7 @@ app.post('/api/xray/download', async (req, res) => {
   }
 });
 
-// Dashboard
+// Дашборд
 app.get('/api/dashboard', (_req, res) => {
   const servers = store.servers.map(serverWithRunning);
   const runningServers = servers.filter((s) => s.status === 'running').length;
@@ -124,7 +165,6 @@ app.get('/api/dashboard', (_req, res) => {
     { upload: 0, download: 0 },
   );
 
-  // Protocol distribution from all inbounds
   const protoMap = new Map<string, number>();
   for (const s of store.servers) {
     for (const ib of s.inbounds || []) {
@@ -163,7 +203,7 @@ app.get('/api/dashboard', (_req, res) => {
   });
 });
 
-// Servers
+// Серверы
 app.get('/api/servers', (_req, res) => {
   const result = store.servers.map((s) => ({
     ...serverWithRunning(s),
@@ -178,12 +218,20 @@ app.get('/api/servers', (_req, res) => {
 });
 
 app.post('/api/servers', (req, res) => {
-  const { name, host, port, location, flag, xrayVersion, realityDest, realitySNI } = req.body;
-  if (!name || !host) return res.status(400).json({ error: 'Name and host required' });
+  const {
+    name, host, port, location, flag, xrayVersion,
+    realityDest, realitySNI,
+    sshPort, sshUser, sshAuthType, sshPrivateKey, sshPassword,
+  } = req.body;
+  if (!name || !host) return res.status(400).json({ error: 'Укажите имя и хост ноды' });
+  if (!sshUser) return res.status(400).json({ error: 'Укажите пользователя SSH' });
   const server = store.addServer({
     name, host, port: port || 443, location: location || '',
     flag: flag || '🌐', xrayVersion: xrayVersion || store.DEFAULT_XRAY_VERSION,
     realityDest, realitySNI,
+    sshPort: Number(sshPort) || 22, sshUser,
+    sshAuthType: sshAuthType || 'password',
+    sshPrivateKey: sshPrivateKey || '', sshPassword: sshPassword || '',
   });
   res.status(201).json(server);
 });
@@ -191,13 +239,14 @@ app.post('/api/servers', (req, res) => {
 app.put('/api/servers/:id', (req, res) => {
   const id = Number(req.params.id);
   const updated = store.updateServer(id, req.body);
-  if (!updated) return res.status(404).json({ error: 'Server not found' });
+  if (!updated) return res.status(404).json({ error: 'Сервер не найден' });
   res.json(updated);
 });
 
-app.delete('/api/servers/:id', (req, res) => {
+app.delete('/api/servers/:id', async (req, res) => {
   const id = Number(req.params.id);
-  stopServer(id);
+  const server = store.getServer(id);
+  if (server) await stopServer(server);
   store.deleteServer(id);
   res.json({ success: true });
 });
@@ -205,7 +254,7 @@ app.delete('/api/servers/:id', (req, res) => {
 app.post('/api/servers/:id/start', async (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
-  if (!server) return res.status(404).json({ error: 'Server not found' });
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
   const clients = store.getClientsByServer(id);
   const result = await startServer(server, clients);
   if (result.ok) store.updateServer(id, { status: 'running', error: undefined });
@@ -213,9 +262,10 @@ app.post('/api/servers/:id/start', async (req, res) => {
   res.json({ success: result.ok, error: result.error });
 });
 
-app.post('/api/servers/:id/stop', (req, res) => {
+app.post('/api/servers/:id/stop', async (req, res) => {
   const id = Number(req.params.id);
-  stopServer(id);
+  const server = store.getServer(id);
+  if (server) await stopServer(server);
   store.updateServer(id, { status: 'stopped' });
   res.json({ success: true });
 });
@@ -223,7 +273,7 @@ app.post('/api/servers/:id/stop', (req, res) => {
 app.post('/api/servers/:id/restart', async (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
-  if (!server) return res.status(404).json({ error: 'Server not found' });
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
   const clients = store.getClientsByServer(id);
   const result = await restartServer(server, clients);
   if (result.ok) store.updateServer(id, { status: 'running', error: undefined });
@@ -234,32 +284,34 @@ app.post('/api/servers/:id/restart', async (req, res) => {
 app.post('/api/servers/:id/regenerate-keys', (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
-  if (!server) return res.status(404).json({ error: 'Server not found' });
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
   const updated = store.regenerateServerKeys(id);
   res.json({ success: true, server: updated });
 });
 
-app.get('/api/servers/:id/logs', (req, res) => {
-  res.json({ logs: getServerLogs(Number(req.params.id)) });
+app.get('/api/servers/:id/logs', async (req, res) => {
+  const id = Number(req.params.id);
+  const server = store.getServer(id);
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
+  const logs = await getServerLogs(server);
+  res.json({ logs });
 });
 
-app.delete('/api/servers/:id/logs', (req, res) => {
-  clearServerLogs(Number(req.params.id));
+app.delete('/api/servers/:id/logs', async (req, res) => {
+  const id = Number(req.params.id);
+  const server = store.getServer(id);
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
+  await clearServerLogs(server);
   res.json({ success: true });
 });
 
 app.get('/api/servers/:id/config', (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
-  if (!server) return res.status(404).json({ error: 'Server not found' });
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
   const clients = store.getClientsByServer(id);
-  const configPath = getServerConfigPath(server, clients);
-  try {
-    const config = readFileSync(configPath, 'utf-8');
-    res.json({ config, filename: `server-${id}-config.json` });
-  } catch {
-    res.status(500).json({ error: 'Failed to read config' });
-  }
+  const config = getServerConfig(server, clients);
+  res.json({ config, filename: `server-${id}-config.json` });
 });
 
 // ── Inbound CRUD ───────────────────────────────────────────────────────
@@ -269,15 +321,14 @@ app.get('/api/servers/:id/inbounds', (req, res) => {
   res.json(store.getInbounds(id));
 });
 
-app.post('/api/servers/:id/inbounds', (req, res) => {
+app.post('/api/servers/:id/inbounds', async (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
-  if (!server) return res.status(404).json({ error: 'Server not found' });
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
   const { protocol, port, network, security, protocolSettings, transportSettings, securitySettings } = req.body;
-  if (!protocol || !port) return res.status(400).json({ error: 'Protocol and port required' });
+  if (!protocol || !port) return res.status(400).json({ error: 'Укажите протокол и порт' });
   const inbound = store.addInbound(id, { protocol, port, network, security, protocolSettings, transportSettings, securitySettings });
-  if (!inbound) return res.status(500).json({ error: 'Failed to create inbound' });
-  // If server is running, restart to apply
+  if (!inbound) return res.status(500).json({ error: 'Не удалось создать инбаунд' });
   if (isServerRunning(id)) {
     const clients = store.getClientsByServer(id);
     startServer(server, clients);
@@ -285,12 +336,11 @@ app.post('/api/servers/:id/inbounds', (req, res) => {
   res.status(201).json(inbound);
 });
 
-app.put('/api/servers/:id/inbounds/:inboundId', (req, res) => {
+app.put('/api/servers/:id/inbounds/:inboundId', async (req, res) => {
   const id = Number(req.params.id);
   const inboundId = Number(req.params.inboundId);
   const updated = store.updateInbound(id, inboundId, req.body);
-  if (!updated) return res.status(404).json({ error: 'Inbound not found' });
-  // If server is running, restart to apply
+  if (!updated) return res.status(404).json({ error: 'Инбаунд не найден' });
   const server = store.getServer(id);
   if (server && isServerRunning(id)) {
     const clients = store.getClientsByServer(id);
@@ -299,11 +349,11 @@ app.put('/api/servers/:id/inbounds/:inboundId', (req, res) => {
   res.json(updated);
 });
 
-app.delete('/api/servers/:id/inbounds/:inboundId', (req, res) => {
+app.delete('/api/servers/:id/inbounds/:inboundId', async (req, res) => {
   const id = Number(req.params.id);
   const inboundId = Number(req.params.inboundId);
   const deleted = store.deleteInbound(id, inboundId);
-  if (!deleted) return res.status(404).json({ error: 'Inbound not found' });
+  if (!deleted) return res.status(404).json({ error: 'Инбаунд не найден' });
   const server = store.getServer(id);
   if (server && isServerRunning(id)) {
     const clients = store.getClientsByServer(id);
@@ -314,23 +364,20 @@ app.delete('/api/servers/:id/inbounds/:inboundId', (req, res) => {
 
 app.post('/api/servers/:id/inbounds/:inboundId/regenerate-keys', (req, res) => {
   const id = Number(req.params.id);
-  const inboundId = Number(req.params.inboundId);
-  // Regenerate keys for a specific reality inbound
   const server = store.getServer(id);
-  if (!server) return res.status(404).json({ error: 'Server not found' });
-  // Use the server-level key regeneration (updates all reality inbounds)
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
   const updated = store.regenerateServerKeys(id);
   res.json({ success: true, server: updated });
 });
 
-// Clients
+// Клиенты
 app.get('/api/clients', (_req, res) => {
   res.json(store.clients.map(clientWithUrls));
 });
 
-app.post('/api/clients', (req, res) => {
+app.post('/api/clients', async (req, res) => {
   const { name, email, serverId, totalLimit, expiryDate } = req.body;
-  if (!name || !email || !serverId) return res.status(400).json({ error: 'Name, email and server required' });
+  if (!name || !email || !serverId) return res.status(400).json({ error: 'Укажите имя, email и сервер' });
   const client = store.addClient({ name, email, serverId, totalLimit, expiryDate });
   const server = store.getServer(serverId);
   if (server && isServerRunning(serverId)) {
@@ -340,10 +387,10 @@ app.post('/api/clients', (req, res) => {
   res.status(201).json(clientWithUrls(client));
 });
 
-app.put('/api/clients/:id', (req, res) => {
+app.put('/api/clients/:id', async (req, res) => {
   const id = Number(req.params.id);
   const updated = store.updateClient(id, req.body);
-  if (!updated) return res.status(404).json({ error: 'Client not found' });
+  if (!updated) return res.status(404).json({ error: 'Клиент не найден' });
   const server = store.getServer(updated.serverId);
   if (server && isServerRunning(updated.serverId)) {
     const clients = store.getClientsByServer(updated.serverId);
@@ -352,7 +399,7 @@ app.put('/api/clients/:id', (req, res) => {
   res.json(clientWithUrls(updated));
 });
 
-app.delete('/api/clients/:id', (req, res) => {
+app.delete('/api/clients/:id', async (req, res) => {
   const id = Number(req.params.id);
   const client = store.clients.find((c) => c.id === id);
   const serverId = client?.serverId;
@@ -370,11 +417,11 @@ app.delete('/api/clients/:id', (req, res) => {
 app.post('/api/clients/:id/reset-stats', (req, res) => {
   const id = Number(req.params.id);
   const updated = store.resetClientStats(id);
-  if (!updated) return res.status(404).json({ error: 'Client not found' });
+  if (!updated) return res.status(404).json({ error: 'Клиент не найден' });
   res.json(clientWithUrls(updated));
 });
 
-// Traffic
+// Трафик
 app.get('/api/traffic', (req, res) => {
   const days = Number(req.query.days) || 30;
   const traffic = store.traffic.slice(-days);
@@ -386,7 +433,6 @@ app.get('/api/traffic', (req, res) => {
     name: s.name, flag: s.flag, upload: s.totalUpload, download: s.totalDownload,
   }));
 
-  // Protocol distribution from inbounds
   const protoMap = new Map<string, number>();
   for (const s of store.servers) {
     for (const ib of s.inbounds || []) {
@@ -416,7 +462,7 @@ app.get('/api/traffic', (req, res) => {
   });
 });
 
-// Notifications
+// Уведомления
 app.get('/api/notifications', (_req, res) => {
   const notifications: { id: number; type: 'warning' | 'error' | 'info' | 'success'; title: string; message: string; time: string; read: boolean }[] = [];
   let nid = 1;
@@ -424,52 +470,52 @@ app.get('/api/notifications', (_req, res) => {
 
   servers.forEach((s) => {
     if (s.status === 'error') {
-      notifications.push({ id: nid++, type: 'error', title: 'Server Error', message: `${s.name} failed to start${s.error ? `: ${s.error}` : ''}`, time: new Date().toISOString(), read: false });
+      notifications.push({ id: nid++, type: 'error', title: 'Ошибка сервера', message: `${s.name}: не удалось запустить${s.error ? ` — ${s.error}` : ''}`, time: new Date().toISOString(), read: false });
     }
     if (s.status === 'stopped' && s.clientCount > 0) {
-      notifications.push({ id: nid++, type: 'warning', title: 'Server Stopped', message: `${s.name} is stopped but has ${s.clientCount} client${s.clientCount > 1 ? 's' : ''}`, time: new Date(Date.now() - 3600000).toISOString(), read: false });
+      notifications.push({ id: nid++, type: 'warning', title: 'Сервер остановлен', message: `${s.name} остановлен, но к нему привязан ${s.clientCount} клиент(ов)`, time: new Date(Date.now() - 3600000).toISOString(), read: false });
     }
   });
 
   store.clients.forEach((c) => {
     const used = c.upload + c.download;
     if (c.status === 'expired') {
-      notifications.push({ id: nid++, type: 'error', title: 'Client Expired', message: `${c.name}'s subscription has expired`, time: new Date(Date.now() - 86400000).toISOString(), read: false });
+      notifications.push({ id: nid++, type: 'error', title: 'Подписка истекла', message: `У клиента ${c.name} истекла подписка`, time: new Date(Date.now() - 86400000).toISOString(), read: false });
     }
     if (c.totalLimit > 0) {
       const pct = used / c.totalLimit;
       if (pct > 1) {
-        notifications.push({ id: nid++, type: 'error', title: 'Data Limit Exceeded', message: `${c.name} exceeded limit: ${used.toFixed(1)} / ${c.totalLimit} GB`, time: new Date(Date.now() - 43200000).toISOString(), read: false });
+        notifications.push({ id: nid++, type: 'error', title: 'Лимит превышен', message: `${c.name} превысил лимит: ${used.toFixed(1)} / ${c.totalLimit} ГБ`, time: new Date(Date.now() - 43200000).toISOString(), read: false });
       } else if (pct > 0.8) {
-        notifications.push({ id: nid++, type: 'warning', title: 'Data Limit Near', message: `${c.name} used ${Math.round(pct * 100)}% of limit`, time: new Date(Date.now() - 43200000).toISOString(), read: false });
+        notifications.push({ id: nid++, type: 'warning', title: 'Лимит почти исчерпан', message: `${c.name} использовал ${Math.round(pct * 100)}% лимита`, time: new Date(Date.now() - 43200000).toISOString(), read: false });
       }
     }
     const daysLeft = Math.ceil((new Date(c.expiryDate).getTime() - Date.now()) / 86400000);
     if (daysLeft > 0 && daysLeft <= 3) {
-      notifications.push({ id: nid++, type: 'warning', title: 'Subscription Expiring', message: `${c.name}'s subscription expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`, time: new Date(Date.now() - 21600000).toISOString(), read: false });
+      notifications.push({ id: nid++, type: 'warning', title: 'Подписка скоро истечёт', message: `У клиента ${c.name} подписка истечёт через ${daysLeft} дн.`, time: new Date(Date.now() - 21600000).toISOString(), read: false });
     }
   });
 
   if (store.servers.length === 0) {
-    notifications.push({ id: nid++, type: 'info', title: 'Welcome', message: 'Add your first server to start managing Xray VPN', time: new Date().toISOString(), read: false });
+    notifications.push({ id: nid++, type: 'info', title: 'Добро пожаловать', message: 'Добавьте первую ноду, чтобы начать управлять VPN на базе Xray', time: new Date().toISOString(), read: false });
   }
 
   res.json(notifications);
 });
 
-// Ping
+// Пинг
 app.get('/api/ping', async (_req, res) => {
   const servers = store.servers.map(serverWithRunning);
   const results = await Promise.all(
     servers.map(async (s) => {
-      const ping = isServerRunning(s.id) ? await tcpPing('127.0.0.1', s.port) : -1;
+      const ping = isServerRunning(s.id) ? await tcpPing(s.host, s.port) : -1;
       return { id: s.id, name: s.name, ping, status: s.status };
     }),
   );
   res.json(results);
 });
 
-// Settings
+// Настройки
 app.get('/api/settings', (_req, res) => res.json(store.settings));
 
 app.put('/api/settings', (req, res) => {
