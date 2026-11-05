@@ -75,6 +75,7 @@ export interface Client {
   lastConnect: string;
   ip: string;
   vlessUrl: string;
+  subUrl?: string;
   shareUrls?: ShareUrl[];
 }
 
@@ -139,6 +140,9 @@ export interface Settings {
   defaultRealitySNI: string;
   defaultTotalLimit: number;
   defaultExpiryDays: number;
+  adminUser: string;
+  adminPassword: string;
+  autoLimitEnabled: boolean;
 }
 
 export interface ServerLogs {

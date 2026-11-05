@@ -70,6 +70,7 @@ export interface ClientData {
   createdAt: string;
   lastConnect: string;
   ip: string;
+  subToken: string;
 }
 
 interface TrafficPoint {
@@ -84,6 +85,9 @@ interface Settings {
   defaultRealitySNI: string;
   defaultTotalLimit: number;
   defaultExpiryDays: number;
+  adminUser: string;
+  adminPassword: string;
+  autoLimitEnabled: boolean;
 }
 
 interface State {
@@ -101,6 +105,9 @@ const DEFAULT_SETTINGS: Settings = {
   defaultRealitySNI: 'www.microsoft.com',
   defaultTotalLimit: 0,
   defaultExpiryDays: 30,
+  adminUser: 'admin',
+  adminPassword: 'admin',
+  autoLimitEnabled: true,
 };
 
 // ── Migration: convert legacy Reality fields to an inbound ─────────────
@@ -160,6 +167,7 @@ function loadState(): State {
       const raw = readFileSync(DATA_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
       if (!parsed.settings) parsed.settings = DEFAULT_SETTINGS;
+      else parsed.settings = { ...DEFAULT_SETTINGS, ...parsed.settings };
       // Migrate legacy servers
       if (parsed.servers) {
         parsed.servers = parsed.servers.map(migrateServer);
@@ -470,6 +478,7 @@ export const store = {
       createdAt: new Date().toISOString(),
       lastConnect: new Date().toISOString(),
       ip: '0.0.0.0',
+      subToken: crypto.randomUUID(),
     };
 
     state.clients.push(client);
@@ -539,6 +548,40 @@ export const store = {
       if (s.status === 'running') s.status = 'stopped';
     }
     save();
+  },
+
+  getClientBySubToken(token: string): ClientData | undefined {
+    return state.clients.find((c) => c.subToken === token);
+  },
+
+  /** Автоматическая проверка лимитов трафика и срока действия подписок.
+   *  Возвращает множество serverId, где статус клиентов изменился (нужен рестарт). */
+  checkClientLimits(): Set<number> {
+    const changed = new Set<number>();
+    const now = Date.now();
+
+    for (const client of state.clients) {
+      if (client.status === 'disabled') continue; // ручное отключение не трогаем
+
+      const used = client.upload + client.download;
+      const expired = new Date(client.expiryDate).getTime() < now;
+      const limited = client.totalLimit > 0 && used >= client.totalLimit;
+
+      if (expired && client.status !== 'expired') {
+        client.status = 'expired';
+        changed.add(client.serverId);
+      } else if (!expired && limited && client.status !== 'limited') {
+        client.status = 'limited';
+        changed.add(client.serverId);
+      } else if (!expired && !limited && (client.status === 'expired' || client.status === 'limited')) {
+        // Восстановление: лимит не превышен и срок не истёк → активен
+        client.status = 'active';
+        changed.add(client.serverId);
+      }
+    }
+
+    if (changed.size > 0) save();
+    return changed;
   },
 
   DEFAULT_XRAY_VERSION,

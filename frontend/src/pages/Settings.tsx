@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, RotateCcw, Cpu, HardDrive, Calendar, Check, Shield, Zap, Network } from 'lucide-react';
+import { Save, RotateCcw, Cpu, HardDrive, Calendar, Check, Shield, Zap, Network, Lock, ToggleLeft, ToggleRight, Eye, EyeOff } from 'lucide-react';
 import { api } from '../api';
 import type { Settings as SettingsType, XrayVersions } from '../types';
 import { useToast } from '../components/Toast';
@@ -11,6 +11,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     api.settings.get().then(setSettings);
@@ -132,6 +133,67 @@ export default function SettingsPage() {
           <Zap size={10} className="text-violet-400 mt-0.5 flex-shrink-0" />
           Настройки протоколов (SNI, ключи, short IDs, шифры) задаются для каждого инбаунда в редакторе инбаундов.
         </p>
+      </div>
+
+      {/* Защита админ-панели */}
+      <div className="glass-card p-5 space-y-3">
+        <SectionTitle icon={Lock} title="Защита панели" />
+        <div>
+          <label className="text-xs text-white/40 mb-1.5 block">Логин администратора</label>
+          <input
+            type="text"
+            value={settings.adminUser}
+            onChange={(e) => update({ adminUser: e.target.value })}
+            className="glass-input w-full px-4 py-3 text-sm"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-white/40 mb-1.5 block">Пароль</label>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={settings.adminPassword}
+              onChange={(e) => update({ adminPassword: e.target.value })}
+              className="glass-input w-full px-4 py-3 pr-10 text-sm"
+            />
+            <button
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </div>
+        <p className="text-[10px] text-white/30 leading-relaxed pt-1 flex items-start gap-1.5">
+          <Shield size={10} className="text-violet-400 mt-0.5 flex-shrink-0" />
+          Изменения вступают в силу после сохранения. Текущая сессия останется активной.
+        </p>
+      </div>
+
+      {/* Автоматические лимиты */}
+      <div className="glass-card p-5 space-y-3">
+        <SectionTitle icon={Zap} title="Автоматические лимиты" />
+        <button
+          onClick={() => update({ autoLimitEnabled: !settings.autoLimitEnabled })}
+          className="w-full flex items-center justify-between"
+        >
+          <div className="text-left">
+            <p className="text-sm text-white/60">Авто-отключение при превышении</p>
+            <p className="text-[10px] text-white/30 mt-0.5">Отключать клиентов при превышении лимита трафика или срока</p>
+          </div>
+          {settings.autoLimitEnabled ? (
+            <ToggleRight size={32} className="text-violet-400 flex-shrink-0" />
+          ) : (
+            <ToggleLeft size={32} className="text-white/20 flex-shrink-0" />
+          )}
+        </button>
+        {settings.autoLimitEnabled && (
+          <div className="space-y-1.5 pt-2 border-t border-white/5">
+            <Row label="Проверка" value="каждые 10 сек" />
+            <Row label="Лимит трафика" value={settings.defaultTotalLimit > 0 ? `${settings.defaultTotalLimit} ГБ` : 'без лимита'} />
+            <Row label="Срок действия" value={`${settings.defaultExpiryDays} дн.`} />
+          </div>
+        )}
       </div>
 
       {/* Кнопка сохранения */}

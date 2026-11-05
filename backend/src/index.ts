@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import { store } from './store';
+import { authMiddleware, createSession, destroySession, validateSession } from './auth';
+import { generateShareUrl } from './xray/share';
 import {
   listAvailableVersions,
   listLocalVersions,
@@ -25,6 +27,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Auth middleware — защищает все эндпоинты кроме публичных
+app.use(authMiddleware);
+
 const PORT = Number(process.env.PORT) || 3001;
 
 resetProcesses();
@@ -37,6 +42,18 @@ setInterval(async () => {
       const stats = await queryStats(server);
       if (Object.keys(stats).length > 0) {
         store.updateTrafficStats(stats);
+      }
+    }
+  }
+
+  // Автоматическая проверка лимитов и срока действия
+  if (store.settings.autoLimitEnabled) {
+    const changedServers = store.checkClientLimits();
+    for (const serverId of changedServers) {
+      const server = store.getServer(serverId);
+      if (server && isServerRunning(serverId)) {
+        const clients = store.getClientsByServer(serverId);
+        startServer(server, clients);
       }
     }
   }
@@ -57,9 +74,9 @@ store.pushTrafficPoint();
 
 // ===== Helpers =====
 
-function clientWithUrls(c: ClientData): ClientData & { vlessUrl: string; shareUrls: { protocol: string; url: string }[] } {
+function clientWithUrls(c: ClientData): ClientData & { vlessUrl: string; subUrl: string; shareUrls: { protocol: string; url: string }[] } {
   const server = store.getServer(c.serverId);
-  if (!server) return { ...c, vlessUrl: '', shareUrls: [] };
+  if (!server) return { ...c, vlessUrl: '', subUrl: '', shareUrls: [] };
 
   const inbounds = server.inbounds || [];
   const shareUrls = inbounds
@@ -86,7 +103,8 @@ function clientWithUrls(c: ClientData): ClientData & { vlessUrl: string; shareUr
     .filter((s) => s.url);
 
   const primary = shareUrls[0]?.url || '';
-  return { ...c, vlessUrl: primary, shareUrls };
+  const subUrl = `/api/sub/${c.subToken}`;
+  return { ...c, vlessUrl: primary, subUrl, shareUrls };
 }
 
 function serverWithRunning(s: ServerData): ServerData {
@@ -96,6 +114,74 @@ function serverWithRunning(s: ServerData): ServerData {
 // ===== Routes =====
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+
+// ── Авторизация ───────────────────────────────────────────────────────
+
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Введите логин и пароль' });
+  if (username !== store.settings.adminUser || password !== store.settings.adminPassword) {
+    return res.status(401).json({ error: 'Неверный логин или пароль' });
+  }
+  const token = createSession(username);
+  res.json({ token, user: username });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (token) destroySession(token);
+  res.json({ success: true });
+});
+
+app.get('/api/auth/check', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (token && validateSession(token)) {
+    res.json({ authenticated: true, user: store.settings.adminUser });
+  } else {
+    res.json({ authenticated: false });
+  }
+});
+
+// ── Подписки клиентов (публичный эндпоинт) ─────────────────────────────
+
+app.get('/api/sub/:token', (req, res) => {
+  const client = store.getClientBySubToken(req.params.token);
+  if (!client) return res.status(404).json({ error: 'Подписка не найдена' });
+
+  const server = store.getServer(client.serverId);
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
+
+  const inbounds = server.inbounds || [];
+  const urls: string[] = [];
+  for (const inbound of inbounds) {
+    if (inbound.protocol === 'dokodemo-door') continue;
+    const ss = { ...inbound.securitySettings };
+    if (inbound.security === 'reality' && server.realityPublicKey) {
+      ss._publicKey = server.realityPublicKey;
+    }
+    const url = generateShareUrl({
+      protocol: inbound.protocol,
+      uuid: client.uuid,
+      host: server.host,
+      port: inbound.port,
+      network: inbound.network,
+      security: inbound.security,
+      securitySettings: ss,
+      transportSettings: inbound.transportSettings,
+      protocolSettings: inbound.protocolSettings,
+      name: client.name,
+    });
+    if (url) urls.push(url);
+  }
+
+  if (urls.length === 0) return res.status(404).json({ error: 'Нет доступных конфигураций' });
+
+  // Возвращаем base64-кодированный список ссылок (стандартный формат подписок)
+  const subscription = Buffer.from(urls.join('\n')).toString('base64');
+  res.setHeader('Content-Type', 'text/plain');
+  res.setHeader('Subscription-Userinfo', `upload=${(client.upload * 1024 * 1024 * 1024).toFixed(0)}; download=${(client.download * 1024 * 1024 * 1024).toFixed(0)}; total=${client.totalLimit > 0 ? client.totalLimit * 1024 * 1024 * 1024 : 0}; expire=${new Date(client.expiryDate).getTime() / 1000 | 0}`);
+  res.send(subscription);
+});
 
 // Проверка SSH-соединения с нодой (до создания сервера)
 app.post('/api/servers/test', async (req, res) => {

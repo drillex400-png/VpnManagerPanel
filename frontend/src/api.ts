@@ -2,11 +2,23 @@ import type { DashboardData, Server, Client, TrafficData, Notification, PingData
 
 const BASE = '/api';
 
+function getAuthToken(): string | null {
+  return localStorage.getItem('auth_token');
+}
+
 async function req<T>(url: string, opts?: RequestInit): Promise<T> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...opts,
   });
+  if (res.status === 401) {
+    localStorage.removeItem('auth_token');
+    window.location.href = '/login';
+    throw new Error('Сессия истекла');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `API ${res.status}` }));
     throw new Error(err.error || `API ${res.status}`);
@@ -15,6 +27,12 @@ async function req<T>(url: string, opts?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  auth: {
+    login: (username: string, password: string) =>
+      req<{ token: string; user: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+    logout: () => req<{ success: boolean }>('/auth/logout', { method: 'POST' }),
+    check: () => req<{ authenticated: boolean; user?: string }>('/auth/check'),
+  },
   dashboard: () => req<DashboardData>('/dashboard'),
   servers: {
     list: () => req<Server[]>('/servers'),

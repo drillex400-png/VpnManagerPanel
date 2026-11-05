@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Server, Users, Activity, Settings, Menu, X } from 'lucide-react';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, Server, Users, Activity, Settings, Menu, X, LogOut } from 'lucide-react';
+import { api } from '../api';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Дашборд' },
@@ -12,6 +13,14 @@ const navItems = [
 
 export default function Layout() {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    api.auth.logout().catch(() => {}).finally(() => {
+      localStorage.removeItem('auth_token');
+      navigate('/login');
+    });
+  };
 
   return (
     <div className="min-h-screen text-white max-w-md mx-auto relative">
@@ -104,7 +113,14 @@ export default function Layout() {
           </div>
 
           {/* Footer */}
-          <div className="pt-4 border-t border-white/5">
+          <div className="pt-4 border-t border-white/5 space-y-3">
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-all"
+            >
+              <LogOut size={20} />
+              <span className="text-sm font-medium">Выйти</span>
+            </button>
             <p className="text-[10px] text-white/30 leading-relaxed">
               VLESS · VMess · Trojan · Shadowsocks<br />
               На ядре Xray-core

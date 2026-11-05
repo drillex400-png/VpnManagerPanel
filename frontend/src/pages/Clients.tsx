@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, Copy, X, Clock, Trash2, Wifi, QrCode, Check, Pencil, RotateCcw } from 'lucide-react';
+import { Plus, Search, Copy, X, Clock, Trash2, Wifi, QrCode, Check, Pencil, RotateCcw, Link } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api';
 import { PROTOCOL_META } from '../protocols';
@@ -258,6 +258,15 @@ export default function Clients() {
                 >
                   {copied === c.id ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                 </button>
+                {c.subUrl && (
+                  <button
+                    onClick={() => copyUrl(window.location.origin + c.subUrl, c.id + 5000)}
+                    className="text-white/30 hover:text-violet-400 transition-colors"
+                    title="Копировать ссылку подписки"
+                  >
+                    {copied === c.id + 5000 ? <Check size={14} className="text-emerald-400" /> : <Link size={14} />}
+                  </button>
+                )}
                 <button
                   onClick={() => handleEdit(c)}
                   className="text-white/30 hover:text-violet-400 transition-colors"
@@ -413,6 +422,20 @@ export default function Clients() {
                     </button>
                   );
                 })}
+              </div>
+            )}
+            {qrClient.subUrl && (
+              <div className="mt-4 pt-4 border-t border-white/5">
+                <p className="text-[10px] text-white/30 mb-1.5 flex items-center gap-1">
+                  <Link size={10} /> Ссылка подписки
+                </p>
+                <button
+                  onClick={() => copyUrl(window.location.origin + qrClient.subUrl, qrClient.id + 9000)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl glass-soft text-left active:scale-95 transition-transform"
+                >
+                  <span className="text-[10px] text-white/40 truncate flex-1 font-mono">{window.location.origin}{qrClient.subUrl}</span>
+                  {copied === qrClient.id + 9000 ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} className="text-white/30" />}
+                </button>
               </div>
             )}
           </div>
