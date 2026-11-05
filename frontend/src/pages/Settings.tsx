@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Save, RotateCcw, Cpu, HardDrive, Calendar, Check, Shield, Zap, Network, Lock, ToggleLeft, ToggleRight, Eye, EyeOff, Download, Upload, AlertTriangle } from 'lucide-react';
+import { PageLoading, PageError } from '../components/PageState';
 import { api } from '../api';
 import type { Settings as SettingsType, XrayVersions } from '../types';
 import { useToast } from '../components/Toast';
@@ -14,20 +15,21 @@ export default function SettingsPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
   const [showRestore, setShowRestore] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    api.settings.get().then(setSettings);
+  const loadSettings = () => {
+    setLoadError('');
+    api.settings.get().then(setSettings).catch((e) => {
+      setLoadError(e.message || 'Ошибка загрузки настроек');
+    });
     api.xray.versions().then(setVersions).catch(console.error);
-  }, []);
+  };
 
-  if (!settings) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  useEffect(() => { loadSettings(); }, []);
+
+  if (loadError) return <PageError message={loadError} onRetry={loadSettings} />;
+  if (!settings) return <PageLoading />;
 
   const update = (patch: Partial<SettingsType>) => {
     setSettings({ ...settings, ...patch });

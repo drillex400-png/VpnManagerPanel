@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { PageLoading, PageError } from '../components/PageState';
 import { Plus, Search, Copy, X, Clock, Trash2, Wifi, QrCode, Check, Pencil, RotateCcw, Link } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api';
@@ -20,6 +21,7 @@ export default function Clients() {
   const [clients, setClients] = useState<Client[]>([]);
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ClientStatus | 'all'>('all');
   const [showAdd, setShowAdd] = useState(false);
@@ -31,7 +33,9 @@ export default function Clients() {
   const [confirmDelete, setConfirmDelete] = useState<Client | null>(null);
   const [confirmReset, setConfirmReset] = useState<Client | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setError('');
+    setLoading(true);
     Promise.all([api.clients.list(), api.servers.list()]).then(([c, s]) => {
       setClients(c);
       setServers(s);
@@ -39,8 +43,13 @@ export default function Clients() {
         setAddForm(prev => ({ ...prev, serverId: s[0].id }));
       }
       setLoading(false);
+    }).catch((e) => {
+      setError(e.message || 'Ошибка загрузки клиентов');
+      setLoading(false);
     });
-  }, []);
+  };
+
+  useEffect(() => { load(); }, []);
 
   const handleAdd = () => {
     const expiry = addForm.expiryDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
@@ -100,13 +109,8 @@ export default function Clients() {
     return ms && mf;
   });
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <PageLoading />;
+  if (error) return <PageError message={error} onRetry={load} />;
 
   const statusStyle = (s: ClientStatus) =>
     s === 'active'

@@ -29,6 +29,7 @@ export interface ServerData {
   xrayVersion: string;
   cpu: number;
   ram: number;
+  disk: number;
   uptime: number;
   clientCount: number;
   totalUpload: number;
@@ -114,6 +115,7 @@ const DEFAULT_SETTINGS: Settings = {
 
 function migrateServer(server: any): ServerData {
   if (server.inbounds && server.inbounds.length > 0) {
+    if (server.disk === undefined) server.disk = 0;
     return server as ServerData;
   }
   // Create a VLESS+Reality inbound from legacy fields
@@ -158,6 +160,7 @@ function migrateServer(server: any): ServerData {
     sshAuthType: server.sshAuthType || 'password',
     sshPrivateKey: server.sshPrivateKey || '',
     sshPassword: server.sshPassword || '',
+    disk: server.disk || 0,
   } as ServerData;
 }
 
@@ -287,7 +290,8 @@ export const store = {
       xrayVersion: data.xrayVersion || DEFAULT_XRAY_VERSION,
       cpu: 0,
       ram: 0,
-      uptime: 100,
+      disk: 0,
+      uptime: 0,
       clientCount: 0,
       totalUpload: 0,
       totalDownload: 0,

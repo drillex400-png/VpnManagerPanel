@@ -228,3 +228,17 @@ export function getServerConfig(server: ServerData, clients: ClientData[]): stri
 export function resetProcesses(): void {
   runningIds.clear();
 }
+
+/** Сбор системных метрик ноды (CPU, RAM, диск, uptime) через SSH. */
+export async function getSystemStats(server: ServerData): Promise<{ cpu: number; ram: number; disk: number; uptime: number }> {
+  const cmd = `echo "$(top -bn1 2>/dev/null | grep 'Cpu(s)' | awk '{print int($2)}' || echo 0);$(free 2>/dev/null | awk '/Mem:/ {printf "%d", $3/$2*100}' || echo 0);$(df / 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}' || echo 0);$(awk '{printf "%d", $1}' /proc/uptime 2>/dev/null || echo 0)"`;
+  const r = await sshExec(server, cmd, 10000);
+  if (r.code !== 0 || !r.stdout.trim()) return { cpu: 0, ram: 0, disk: 0, uptime: 0 };
+  const parts = r.stdout.trim().split(';');
+  return {
+    cpu: Math.min(100, Number(parts[0]) || 0),
+    ram: Math.min(100, Number(parts[1]) || 0),
+    disk: Math.min(100, Number(parts[2]) || 0),
+    uptime: Number(parts[3]) || 0,
+  };
+}

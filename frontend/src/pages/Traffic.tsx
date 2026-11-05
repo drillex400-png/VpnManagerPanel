@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import { ArrowUp, ArrowDown, Database } from 'lucide-react';
+import { PageLoading, PageError } from '../components/PageState';
 import { api } from '../api';
 import type { TrafficData } from '../types';
 
@@ -12,19 +13,21 @@ const ranges = [
 
 export default function Traffic() {
   const [data, setData] = useState<TrafficData | null>(null);
+  const [error, setError] = useState('');
   const [days, setDays] = useState(30);
 
-  useEffect(() => {
-    api.traffic(days).then(setData);
-  }, [days]);
+  const load = () => {
+    setError('');
+    api.traffic(days).then(setData).catch((e) => {
+      setError(e.message || 'Ошибка загрузки трафика');
+      setData(null);
+    });
+  };
 
-  if (!data) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  useEffect(() => { load(); }, [days]);
+
+  if (error) return <PageError message={error} onRetry={load} />;
+  if (!data) return <PageLoading />;
 
   const summaries = [
     { label: 'Исходящий', value: data.totals.upload.toFixed(2), unit: 'ГБ', icon: ArrowUp, color: 'text-violet-400', bg: 'bg-violet-500/10' },

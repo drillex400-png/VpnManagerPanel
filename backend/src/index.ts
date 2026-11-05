@@ -18,6 +18,7 @@ import {
   clearServerLogs,
   getServerConfig,
   testConnection,
+  getSystemStats,
 } from './xray/manager';
 import { generateShareUrl } from './xray/share';
 import type { ServerData, ClientData } from './store';
@@ -43,6 +44,9 @@ setInterval(async () => {
       if (Object.keys(stats).length > 0) {
         store.updateTrafficStats(stats);
       }
+      // Сбор системных метрик ноды
+      const sysStats = await getSystemStats(server);
+      store.updateServer(server.id, sysStats);
     }
   }
 
@@ -282,7 +286,7 @@ app.get('/api/dashboard', (_req, res) => {
     recentTraffic: traffic.slice(-7),
     serversList: servers.map((s) => ({
       id: s.id, name: s.name, flag: s.flag, status: s.status,
-      cpu: s.cpu, ram: s.ram, clientCount: s.clientCount,
+      cpu: s.cpu, ram: s.ram, disk: s.disk, clientCount: s.clientCount,
       uploadSpeed: s.uploadSpeed, downloadSpeed: s.downloadSpeed, ping: 0,
     })),
     xrayVersions: { available: listLocalVersions(), default: store.DEFAULT_XRAY_VERSION },

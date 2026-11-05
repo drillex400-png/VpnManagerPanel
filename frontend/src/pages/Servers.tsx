@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { PageLoading, PageError } from '../components/PageState';
 import { Plus, Search, ChevronDown, Cpu, HardDrive, MemoryStick, Trash2, X, Globe, Wifi, Play, Square, Download, Loader2, RotateCcw, FileDown, ScrollText, Pencil, Shield, Layers, KeyRound, Plug } from 'lucide-react';
 import { api } from '../api';
 import { PROTOCOL_META } from '../protocols';
@@ -27,6 +28,7 @@ export default function Servers() {
   const { success: toastSuccess, error: toastError } = useToast();
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -48,8 +50,13 @@ export default function Servers() {
   const [confirmDeleteInbound, setConfirmDeleteInbound] = useState<{ serverId: number; inboundId: number; name: string; port: number } | null>(null);
 
   const load = useCallback(() => {
+    setError('');
+    setLoading(true);
     api.servers.list().then((s) => {
       setServers(s);
+      setLoading(false);
+    }).catch((e) => {
+      setError(e.message || 'Ошибка загрузки нод');
       setLoading(false);
     });
   }, []);
@@ -201,13 +208,8 @@ export default function Servers() {
       s.location.toLowerCase().includes(search.toLowerCase()),
   );
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <PageLoading />;
+  if (error) return <PageError message={error} onRetry={load} />;
 
   const statusStyle = (s: string) =>
     s === 'running'
@@ -308,7 +310,7 @@ export default function Servers() {
                 {[
                   { icon: Cpu, label: 'ЦП', value: s.cpu },
                   { icon: MemoryStick, label: 'ОЗУ', value: s.ram },
-                  { icon: HardDrive, label: 'Диск', value: 0 },
+                  { icon: HardDrive, label: 'Диск', value: s.disk },
                 ].map((r, i) => (
                   <div key={i} className="glass-soft rounded-xl p-2">
                     <div className="flex items-center gap-1 mb-1">

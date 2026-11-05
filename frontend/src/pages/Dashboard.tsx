@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AreaChart, Area, ResponsiveContainer, XAxis, Tooltip } from 'recharts';
 import { Server as ServerIcon, Users, TrendingUp, Activity, AlertCircle, AlertTriangle, Info, CheckCircle, Cpu } from 'lucide-react';
+import { PageLoading, PageError } from '../components/PageState';
 import { api } from '../api';
 import type { DashboardData, Notification } from '../types';
 import NotificationsPanel from '../components/NotificationsPanel';
@@ -25,24 +26,27 @@ function timeAgo(time: string) {
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState('');
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
+  const load = () => {
+    setError('');
+    api.dashboard().then(setData).catch((e) => {
+      setError(e.message || 'Ошибка загрузки дашборда');
+    });
+    api.notifications().then(setNotifications).catch(() => {});
+  };
+
   useEffect(() => {
-    api.dashboard().then(setData).catch(console.error);
-    api.notifications().then(setNotifications).catch(console.error);
+    load();
     const interval = setInterval(() => {
-      api.dashboard().then(setData).catch(console.error);
+      api.dashboard().then(setData).catch(() => {});
     }, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  if (!data) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (error) return <PageError message={error} onRetry={load} />;
+  if (!data) return <PageLoading />;
 
   const todayTotal = data.traffic.today.upload + data.traffic.today.download;
   const monthTotal = data.traffic.month.upload + data.traffic.month.download;

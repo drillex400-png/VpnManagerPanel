@@ -30,6 +30,7 @@ export interface Server {
   xrayVersion: string;
   cpu: number;
   ram: number;
+  disk: number;
   uptime: number;
   clientCount: number;
   totalUpload: number;
@@ -86,6 +87,7 @@ export interface ServerListItem {
   status: ServerStatus;
   cpu: number;
   ram: number;
+  disk: number;
   clientCount: number;
   uploadSpeed: number;
   downloadSpeed: number;
