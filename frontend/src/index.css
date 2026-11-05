@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0A0A0F;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+/* Hide scrollbar */
+::-webkit-scrollbar {
+  display: none;
+}
+* {
+  scrollbar-width: none;
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/[0.03] backdrop-blur-xl border border-white/[0.06];
+  }
+  .glass-card {
+    @apply glass rounded-3xl;
+  }
+  .glass-input {
+    @apply bg-white/[0.04] border border-white/[0.08] rounded-2xl text-white placeholder-white/30 focus:outline-none focus:border-violet-500/40 transition-colors;
+  }
+  .fab {
+    @apply fixed bottom-24 right-4 w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-violet-500/30 active:scale-95 transition-transform z-40;
+  }
+}
+
+/* Safe area padding for mobile */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
