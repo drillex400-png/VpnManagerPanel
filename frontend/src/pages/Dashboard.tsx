@@ -1,14 +1,35 @@
 import { useEffect, useState } from 'react';
 import { AreaChart, Area, ResponsiveContainer, XAxis, Tooltip } from 'recharts';
-import { Server as ServerIcon, Users, TrendingUp, Activity, Bell } from 'lucide-react';
+import { Server as ServerIcon, Users, TrendingUp, Activity, AlertCircle, AlertTriangle, Info, CheckCircle } from 'lucide-react';
 import { api } from '../api';
-import type { DashboardData } from '../types';
+import type { DashboardData, Notification } from '../types';
+import NotificationsPanel from '../components/NotificationsPanel';
+import PingWidget from '../components/PingWidget';
+
+const notifConfig: Record<string, { icon: typeof AlertCircle; color: string; bg: string }> = {
+  error: { icon: AlertCircle, color: 'text-red-400', bg: 'bg-red-500/10' },
+  warning: { icon: AlertTriangle, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+  info: { icon: Info, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+  success: { icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+};
+
+function timeAgo(time: string) {
+  const diff = Date.now() - new Date(time).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
     api.dashboard().then(setData).catch(console.error);
+    api.notifications().then(setNotifications).catch(console.error);
   }, []);
 
   if (!data) {
@@ -43,9 +64,7 @@ export default function Dashboard() {
           <p className="text-sm text-white/40">Control Center</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="w-10 h-10 rounded-full glass flex items-center justify-center">
-            <Bell size={18} className="text-white/60" />
-          </button>
+          <NotificationsPanel />
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white font-semibold text-sm">
             AD
           </div>
@@ -113,6 +132,37 @@ export default function Dashboard() {
             <div className="w-2 h-2 rounded-full bg-cyan-400" />
             <span className="text-[10px] text-white/40">Download</span>
           </div>
+        </div>
+      </div>
+
+      {/* Live Ping Widget */}
+      <PingWidget />
+
+      {/* Recent Alerts */}
+      <div className="glass-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-white/60">Recent Alerts</h2>
+          <span className="text-xs text-white/30">{notifications.filter((n) => !n.read).length} unread</span>
+        </div>
+        <div className="space-y-2.5">
+          {notifications.filter((n) => !n.read).slice(0, 4).map((n) => {
+            const cfg = notifConfig[n.type];
+            return (
+              <div key={n.id} className="flex gap-3 items-start">
+                <div className={`w-8 h-8 rounded-lg ${cfg.bg} flex items-center justify-center flex-shrink-0`}>
+                  <cfg.icon size={14} className={cfg.color} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium">{n.title}</p>
+                  <p className="text-[10px] text-white/40 mt-0.5 leading-snug">{n.message}</p>
+                  <p className="text-[9px] text-white/20 mt-1">{timeAgo(n.time)}</p>
+                </div>
+              </div>
+            );
+          })}
+          {notifications.filter((n) => !n.read).length === 0 && (
+            <p className="text-xs text-white/30 text-center py-4">All clear — no unread alerts</p>
+          )}
         </div>
       </div>
 

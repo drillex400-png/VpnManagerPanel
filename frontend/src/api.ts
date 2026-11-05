@@ -1,4 +1,4 @@
-import type { DashboardData, Server, Client, TrafficData, ProtocolType } from './types';
+import type { DashboardData, Server, Client, TrafficData, ProtocolType, Notification, PingData } from './types';
 
 const BASE = '/api';
 
@@ -29,4 +29,6 @@ export const api = {
     delete: (id: number) => req<{ success: boolean }>(`/clients/${id}`, { method: 'DELETE' }),
   },
   traffic: (days = 30) => req<TrafficData>(`/traffic?days=${days}`),
+  notifications: () => req<Notification[]>('/notifications'),
+  ping: () => req<PingData[]>('/ping'),
 };

@@ -33,6 +33,7 @@ interface Server {
   totalUpload: number;
   totalDownload: number;
   createdAt: string;
+  ping: number;
 }
 
 interface Protocol {
@@ -84,11 +85,11 @@ const PROTOCOL_META: Record<string, { name: string; color: string }> = {
 
 // ===== Seed Data =====
 let servers: Server[] = [
-  { id: 1, name: 'Frankfurt-01', host: 'de-fra-01.vpnctrl.net', port: 443, location: 'Frankfurt, Germany', flag: '🇩🇪', status: 'online', uptime: 99.98, cpu: 34, ram: 58, ramTotal: 8, disk: 42, diskTotal: 160, uploadSpeed: 245.8, downloadSpeed: 890.3, clientCount: 18, totalUpload: 1234.5, totalDownload: 5678.9, createdAt: '2025-08-15T10:00:00Z' },
-  { id: 2, name: 'Amsterdam-01', host: 'nl-ams-01.vpnctrl.net', port: 443, location: 'Amsterdam, Netherlands', flag: '🇳🇱', status: 'online', uptime: 99.95, cpu: 22, ram: 45, ramTotal: 16, disk: 28, diskTotal: 320, uploadSpeed: 180.4, downloadSpeed: 620.7, clientCount: 12, totalUpload: 890.2, totalDownload: 3456.7, createdAt: '2025-09-01T12:00:00Z' },
-  { id: 3, name: 'Tokyo-01', host: 'jp-tyo-01.vpnctrl.net', port: 443, location: 'Tokyo, Japan', flag: '🇯🇵', status: 'online', uptime: 99.89, cpu: 45, ram: 62, ramTotal: 8, disk: 51, diskTotal: 160, uploadSpeed: 310.2, downloadSpeed: 1020.5, clientCount: 9, totalUpload: 567.8, totalDownload: 2345.6, createdAt: '2025-09-20T08:00:00Z' },
-  { id: 4, name: 'NewYork-01', host: 'us-nyc-01.vpnctrl.net', port: 443, location: 'New York, USA', flag: '🇺🇸', status: 'maintenance', uptime: 98.50, cpu: 0, ram: 0, ramTotal: 16, disk: 35, diskTotal: 320, uploadSpeed: 0, downloadSpeed: 0, clientCount: 5, totalUpload: 234.5, totalDownload: 1234.5, createdAt: '2025-07-10T14:00:00Z' },
-  { id: 5, name: 'Singapore-01', host: 'sg-sin-01.vpnctrl.net', port: 443, location: 'Singapore', flag: '🇸🇬', status: 'online', uptime: 99.92, cpu: 28, ram: 51, ramTotal: 8, disk: 38, diskTotal: 160, uploadSpeed: 195.6, downloadSpeed: 715.3, clientCount: 3, totalUpload: 345.6, totalDownload: 1567.8, createdAt: '2025-10-01T09:00:00Z' },
+  { id: 1, name: 'Frankfurt-01', host: 'de-fra-01.vpnctrl.net', port: 443, location: 'Frankfurt, Germany', flag: '🇩🇪', status: 'online', uptime: 99.98, cpu: 34, ram: 58, ramTotal: 8, disk: 42, diskTotal: 160, uploadSpeed: 245.8, downloadSpeed: 890.3, clientCount: 18, totalUpload: 1234.5, totalDownload: 5678.9, ping: 12, createdAt: '2025-08-15T10:00:00Z' },
+  { id: 2, name: 'Amsterdam-01', host: 'nl-ams-01.vpnctrl.net', port: 443, location: 'Amsterdam, Netherlands', flag: '🇳🇱', status: 'online', uptime: 99.95, cpu: 22, ram: 45, ramTotal: 16, disk: 28, diskTotal: 320, uploadSpeed: 180.4, downloadSpeed: 620.7, clientCount: 12, totalUpload: 890.2, totalDownload: 3456.7, ping: 8, createdAt: '2025-09-01T12:00:00Z' },
+  { id: 3, name: 'Tokyo-01', host: 'jp-tyo-01.vpnctrl.net', port: 443, location: 'Tokyo, Japan', flag: '🇯🇵', status: 'online', uptime: 99.89, cpu: 45, ram: 62, ramTotal: 8, disk: 51, diskTotal: 160, uploadSpeed: 310.2, downloadSpeed: 1020.5, clientCount: 9, totalUpload: 567.8, totalDownload: 2345.6, ping: 145, createdAt: '2025-09-20T08:00:00Z' },
+  { id: 4, name: 'NewYork-01', host: 'us-nyc-01.vpnctrl.net', port: 443, location: 'New York, USA', flag: '🇺🇸', status: 'maintenance', uptime: 98.50, cpu: 0, ram: 0, ramTotal: 16, disk: 35, diskTotal: 320, uploadSpeed: 0, downloadSpeed: 0, clientCount: 5, totalUpload: 234.5, totalDownload: 1234.5, ping: -1, createdAt: '2025-07-10T14:00:00Z' },
+  { id: 5, name: 'Singapore-01', host: 'sg-sin-01.vpnctrl.net', port: 443, location: 'Singapore', flag: '🇸🇬', status: 'online', uptime: 99.92, cpu: 28, ram: 51, ramTotal: 8, disk: 38, diskTotal: 160, uploadSpeed: 195.6, downloadSpeed: 715.3, clientCount: 3, totalUpload: 345.6, totalDownload: 1567.8, ping: 189, createdAt: '2025-10-01T09:00:00Z' },
 ];
 
 let protocols: Protocol[] = [
@@ -230,6 +231,7 @@ app.get('/api/dashboard', (_req, res) => {
       clientCount: s.clientCount,
       uploadSpeed: s.uploadSpeed,
       downloadSpeed: s.downloadSpeed,
+      ping: s.ping,
     })),
   });
 });
@@ -265,6 +267,7 @@ app.post('/api/servers', (req, res) => {
     clientCount: 0,
     totalUpload: 0,
     totalDownload: 0,
+    ping: 0,
     createdAt: new Date().toISOString(),
   };
   servers.push(server);
@@ -393,6 +396,65 @@ app.get('/api/traffic', (req, res) => {
       .sort((a, b) => b.count - a.count),
     totals: { upload: totals.upload, download: totals.download, total: totals.upload + totals.download },
   });
+});
+
+// Notifications
+app.get('/api/notifications', (_req, res) => {
+  const notifications: { id: number; type: 'warning' | 'error' | 'info' | 'success'; title: string; message: string; time: string; read: boolean }[] = [];
+  let nid = 1;
+
+  servers.forEach((s) => {
+    if (s.status === 'maintenance') {
+      notifications.push({ id: nid++, type: 'warning', title: 'Server Maintenance', message: `${s.name} (${s.location}) is under maintenance`, time: new Date(Date.now() - 3600000).toISOString(), read: false });
+    }
+    if (s.status === 'offline') {
+      notifications.push({ id: nid++, type: 'error', title: 'Server Offline', message: `${s.name} (${s.location}) is offline`, time: new Date(Date.now() - 7200000).toISOString(), read: false });
+    }
+    if (s.cpu > 80) {
+      notifications.push({ id: nid++, type: 'warning', title: 'High CPU', message: `${s.name} CPU usage at ${s.cpu}%`, time: new Date(Date.now() - 1800000).toISOString(), read: false });
+    }
+    if (s.ram > 80) {
+      notifications.push({ id: nid++, type: 'warning', title: 'High RAM', message: `${s.name} RAM usage at ${s.ram}%`, time: new Date(Date.now() - 1500000).toISOString(), read: false });
+    }
+    if (s.disk > 80) {
+      notifications.push({ id: nid++, type: 'warning', title: 'Low Disk Space', message: `${s.name} disk usage at ${s.disk}%`, time: new Date(Date.now() - 2400000).toISOString(), read: false });
+    }
+  });
+
+  clients.forEach((c) => {
+    const used = c.upload + c.download;
+    if (c.status === 'expired') {
+      notifications.push({ id: nid++, type: 'error', title: 'Client Expired', message: `${c.name}'s subscription has expired`, time: new Date(Date.now() - 86400000).toISOString(), read: false });
+    }
+    if (c.totalLimit > 0) {
+      const pct = used / c.totalLimit;
+      if (pct > 1) {
+        notifications.push({ id: nid++, type: 'error', title: 'Data Limit Exceeded', message: `${c.name} exceeded limit: ${used.toFixed(1)} / ${c.totalLimit} GB`, time: new Date(Date.now() - 43200000).toISOString(), read: false });
+      } else if (pct > 0.8) {
+        notifications.push({ id: nid++, type: 'warning', title: 'Data Limit Near', message: `${c.name} used ${Math.round(pct * 100)}% of limit (${used.toFixed(1)} / ${c.totalLimit} GB)`, time: new Date(Date.now() - 43200000).toISOString(), read: false });
+      }
+    }
+    const daysLeft = Math.ceil((new Date(c.expiryDate).getTime() - Date.now()) / 86400000);
+    if (daysLeft > 0 && daysLeft <= 3) {
+      notifications.push({ id: nid++, type: 'warning', title: 'Subscription Expiring', message: `${c.name}'s subscription expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`, time: new Date(Date.now() - 21600000).toISOString(), read: false });
+    }
+  });
+
+  notifications.push({ id: nid++, type: 'success', title: 'System Update', message: 'VPN Panel updated to version 2.1', time: new Date(Date.now() - 86400000 * 2).toISOString(), read: true });
+  notifications.push({ id: nid++, type: 'info', title: 'New Protocol', message: 'Hysteria2 is now available on all servers', time: new Date(Date.now() - 86400000 * 3).toISOString(), read: true });
+
+  res.json(notifications);
+});
+
+// Live ping simulation
+app.get('/api/ping', (_req, res) => {
+  const pings = servers.map((s) => ({
+    id: s.id,
+    name: s.name,
+    ping: s.status === 'online' ? Math.max(1, s.ping + Math.floor(Math.random() * 10) - 5) : -1,
+    status: s.status,
+  }));
+  res.json(pings);
 });
 
 app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));

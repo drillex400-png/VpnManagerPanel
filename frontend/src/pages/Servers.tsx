@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, ChevronDown, Cpu, HardDrive, MemoryStick, Trash2, X, Globe } from 'lucide-react';
+import { Plus, Search, ChevronDown, Cpu, HardDrive, MemoryStick, Trash2, X, Globe, Wifi } from 'lucide-react';
 import { api } from '../api';
 import { PROTOCOL_META, PROTOCOL_TYPES } from '../types';
-import type { Server, ProtocolType } from '../types';
+import type { Server, ProtocolType, PingData } from '../types';
 
 const flags = ['🇩🇪', '🇳🇱', '🇯🇵', '🇺🇸', '🇸🇬', '🇬🇧', '🇫🇷', '🇨🇦', '🌐'];
 
@@ -14,9 +14,13 @@ export default function Servers() {
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', host: '', port: 443, location: '', flag: '🌐' });
   const [addProto, setAddProto] = useState<{ serverId: number; type: ProtocolType; port: number } | null>(null);
+  const [pings, setPings] = useState<PingData[]>([]);
 
   useEffect(() => {
     load();
+    api.ping().then(setPings);
+    const interval = setInterval(() => api.ping().then(setPings), 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const load = () => {
@@ -115,6 +119,12 @@ export default function Servers() {
                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${st.bg} ${st.text} font-medium`}>
                     {st.label}
                   </span>
+                  {(() => {
+                    const p = pings.find((pp) => pp.id === s.id);
+                    const pv = p?.ping ?? -1;
+                    const pc = pv < 0 ? 'text-white/20' : pv < 50 ? 'text-emerald-400' : pv < 150 ? 'text-amber-400' : 'text-red-400';
+                    return <span className={`flex items-center gap-0.5 text-[10px] font-mono ${pc}`}><Wifi size={10} />{pv > 0 ? `${pv}ms` : '—'}</span>;
+                  })()}
                   <ChevronDown
                     size={18}
                     className={`text-white/30 transition-transform ${isExp ? 'rotate-180' : ''}`}

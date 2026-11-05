@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, Copy, X, Clock, Globe, Trash2, Wifi } from 'lucide-react';
+import { Plus, Search, Copy, X, Clock, Globe, Trash2, Wifi, QrCode } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api';
 import { PROTOCOL_META, PROTOCOL_TYPES } from '../types';
 import type { Client, ClientStatus, ProtocolType, Server } from '../types';
@@ -19,6 +20,7 @@ export default function Clients() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ClientStatus | 'all'>('all');
   const [showAdd, setShowAdd] = useState(false);
+  const [qrClient, setQrClient] = useState<Client | null>(null);
   const [addForm, setAddForm] = useState({ name: '', email: '', serverId: 1, protocol: 'vless' as ProtocolType, totalLimit: 0, expiryDate: '' });
 
   useEffect(() => {
@@ -179,6 +181,13 @@ export default function Clients() {
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => setQrClient(c)}
+                  className="text-white/30 hover:text-violet-400 transition-colors"
+                  title="Show QR code"
+                >
+                  <QrCode size={14} />
+                </button>
+                <button
                   onClick={() => copyUrl(c.subscriptionUrl)}
                   className="text-white/30 hover:text-violet-400 transition-colors"
                   title="Copy subscription URL"
@@ -277,6 +286,32 @@ export default function Clients() {
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition-transform"
             >
               Add Client
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {qrClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setQrClient(null)}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div className="relative glass-card p-6 m-4 max-w-xs w-full animate-scale-in text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold">{qrClient.name}</h2>
+              <button onClick={() => setQrClient(null)} className="text-white/40">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-xs text-white/40 mb-4">{PROTOCOL_META[qrClient.protocol].name} • {qrClient.serverName}</p>
+            <div className="bg-white p-4 rounded-2xl inline-block">
+              <QRCodeSVG value={qrClient.subscriptionUrl} size={180} level="M" />
+            </div>
+            <p className="text-[10px] text-white/30 mt-4 break-all">{qrClient.subscriptionUrl}</p>
+            <button
+              onClick={() => copyUrl(qrClient.subscriptionUrl)}
+              className="w-full mt-4 py-3 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+            >
+              <Copy size={14} /> Copy Subscription URL
             </button>
           </div>
         </div>

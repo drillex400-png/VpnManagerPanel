@@ -33,6 +33,7 @@ export interface Server {
   totalUpload: number;
   totalDownload: number;
   createdAt: string;
+  ping: number;
   protocols?: Protocol[];
 }
 
@@ -65,6 +66,7 @@ export interface ServerListItem {
   clientCount: number;
   uploadSpeed: number;
   downloadSpeed: number;
+  ping: number;
 }
 
 export interface DashboardData {
@@ -84,6 +86,22 @@ export interface TrafficData {
   perServer: { name: string; flag: string; upload: number; download: number }[];
   protocolDistribution: { type: ProtocolType; name: string; color: string; count: number }[];
   totals: { upload: number; download: number; total: number };
+}
+
+export interface Notification {
+  id: number;
+  type: 'warning' | 'error' | 'info' | 'success';
+  title: string;
+  message: string;
+  time: string;
+  read: boolean;
+}
+
+export interface PingData {
+  id: number;
+  name: string;
+  ping: number;
+  status: string;
 }
 
 export const PROTOCOL_META: Record<ProtocolType, { name: string; color: string }> = {
