@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Save, RotateCcw, Cpu, HardDrive, Calendar, Check, Shield, Zap, Network, Lock, ToggleLeft, ToggleRight, Eye, EyeOff } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Save, RotateCcw, Cpu, HardDrive, Calendar, Check, Shield, Zap, Network, Lock, ToggleLeft, ToggleRight, Eye, EyeOff, Download, Upload, AlertTriangle } from 'lucide-react';
 import { api } from '../api';
 import type { Settings as SettingsType, XrayVersions } from '../types';
 import { useToast } from '../components/Toast';
@@ -12,6 +12,9 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [showRestore, setShowRestore] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.settings.get().then(setSettings);
@@ -38,6 +41,41 @@ export default function SettingsPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     });
+  };
+
+  const handleBackup = async () => {
+    setBackupBusy(true);
+    try {
+      const data = await api.backup.export();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `xray-panel-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toastSuccess('Резервная копия сохранена');
+    } catch (e) {
+      toastError(`Ошибка: ${(e as Error).message}`);
+    }
+    setBackupBusy(false);
+  };
+
+  const handleRestore = async (file: File) => {
+    setBackupBusy(true);
+    setShowRestore(false);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const result = await api.backup.restore(data);
+      toastSuccess(`Восстановлено: ${result.servers} нод, ${result.clients} клиентов`);
+      // Перезагружаем настройки
+      const s = await api.settings.get();
+      setSettings(s);
+    } catch (e) {
+      toastError(`Ошибка восстановления: ${(e as Error).message}`);
+    }
+    setBackupBusy(false);
   };
 
   const handleDownloadVersion = async (version: string) => {
@@ -193,6 +231,63 @@ export default function SettingsPage() {
             <Row label="Лимит трафика" value={settings.defaultTotalLimit > 0 ? `${settings.defaultTotalLimit} ГБ` : 'без лимита'} />
             <Row label="Срок действия" value={`${settings.defaultExpiryDays} дн.`} />
           </div>
+        )}
+      </div>
+
+      {/* Резервное копирование */}
+      <div className="glass-card p-5 space-y-3">
+        <SectionTitle icon={Download} title="Резервное копирование" />
+        <p className="text-[10px] text-white/30 leading-relaxed">
+          Экспортируйте все данные панели (ноды, клиенты, настройки, статистика) в файл JSON. Используйте для резервного копирования или переноса на другой сервер.
+        </p>
+        <button
+          onClick={handleBackup}
+          disabled={backupBusy}
+          className="w-full py-2.5 rounded-2xl bg-violet-500/15 text-violet-400 text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-50"
+        >
+          {backupBusy ? <RotateCcw size={14} className="animate-spin" /> : <Download size={14} />}
+          Скачать резервную копию
+        </button>
+        {showRestore ? (
+          <div className="space-y-2 pt-2 border-t border-white/5">
+            <div className="flex items-start gap-1.5 text-[10px] text-amber-400/80">
+              <AlertTriangle size={10} className="mt-0.5 flex-shrink-0" />
+              <span>Восстановление заменит все текущие данные панели. Рекомендуется сделать резервную копию перед восстановлением.</span>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleRestore(f);
+                e.target.value = '';
+              }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={backupBusy}
+              className="w-full py-2.5 rounded-2xl bg-amber-500/15 text-amber-400 text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              <Upload size={14} />
+              Выбрать файл для восстановления
+            </button>
+            <button
+              onClick={() => setShowRestore(false)}
+              className="w-full text-[10px] text-white/30 hover:text-white/50 py-1"
+            >
+              Отмена
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowRestore(true)}
+            className="w-full py-2.5 rounded-2xl bg-white/5 text-white/50 text-xs font-medium flex items-center justify-center gap-1.5 hover:bg-white/10"
+          >
+            <Upload size={14} />
+            Восстановить из файла
+          </button>
         )}
       </div>
 

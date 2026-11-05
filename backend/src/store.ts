@@ -584,5 +584,24 @@ export const store = {
     return changed;
   },
 
+  exportData(): { servers: ServerData[]; clients: ClientData[]; traffic: TrafficPoint[]; settings: Settings; exportedAt: string; version: string } {
+    return {
+      servers: JSON.parse(JSON.stringify(state.servers)),
+      clients: JSON.parse(JSON.stringify(state.clients)),
+      traffic: JSON.parse(JSON.stringify(state.traffic)),
+      settings: { ...state.settings },
+      exportedAt: new Date().toISOString(),
+      version: '1.0',
+    };
+  },
+
+  importData(data: { servers?: ServerData[]; clients?: ClientData[]; traffic?: TrafficPoint[]; settings?: Partial<Settings> }): void {
+    if (data.servers) state.servers = data.servers.map(migrateServer);
+    if (data.clients) state.clients = data.clients;
+    if (data.traffic) state.traffic = data.traffic;
+    if (data.settings) state.settings = { ...DEFAULT_SETTINGS, ...state.settings, ...data.settings };
+    save();
+  },
+
   DEFAULT_XRAY_VERSION,
 };

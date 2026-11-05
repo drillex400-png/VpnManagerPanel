@@ -73,4 +73,8 @@ export const api = {
     get: () => req<Settings>('/settings'),
     update: (data: Partial<Settings>) => req<Settings>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
   },
+  backup: {
+    export: () => req<{ servers: any[]; clients: any[]; traffic: any[]; settings: Settings; exportedAt: string }>('/backup'),
+    restore: (data: any) => req<{ success: boolean; servers: number; clients: number }>('/restore', { method: 'POST', body: JSON.stringify(data) }),
+  },
 };

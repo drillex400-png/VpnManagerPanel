@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import { store } from './store';
 import { authMiddleware, createSession, destroySession, validateSession } from './auth';
-import { generateShareUrl } from './xray/share';
 import {
   listAvailableVersions,
   listLocalVersions,
@@ -22,6 +21,7 @@ import {
 } from './xray/manager';
 import { generateShareUrl } from './xray/share';
 import type { ServerData, ClientData } from './store';
+
 
 const app = express();
 app.use(cors());
@@ -606,6 +606,33 @@ app.get('/api/settings', (_req, res) => res.json(store.settings));
 
 app.put('/api/settings', (req, res) => {
   res.json(store.updateSettings(req.body));
+});
+
+// Резервное копирование и восстановление
+app.get('/api/backup', (_req, res) => {
+  const data = store.exportData();
+  res.setHeader('Content-Disposition', `attachment; filename="xray-panel-backup-${new Date().toISOString().slice(0, 10)}.json"`);
+  res.json(data);
+});
+
+app.post('/api/restore', (req, res) => {
+  const data = req.body;
+  if (!data || (!data.servers && !data.clients && !data.settings)) {
+    return res.status(400).json({ error: 'Неверный формат резервной копии' });
+  }
+  try {
+    store.importData(data);
+    // Перезапускаем все запущенные серверы с новыми данными
+    for (const server of store.servers) {
+      if (isServerRunning(server.id)) {
+        const clients = store.getClientsByServer(server.id);
+        startServer(server, clients);
+      }
+    }
+    res.json({ success: true, servers: store.servers.length, clients: store.clients.length });
+  } catch (e) {
+    res.status(500).json({ error: `Ошибка восстановления: ${(e as Error).message}` });
+  }
 });
 
 app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
