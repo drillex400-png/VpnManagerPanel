@@ -4,6 +4,8 @@ import { api } from '../api';
 import { PROTOCOL_META } from '../protocols';
 import type { Server, PingData, XrayVersions, Inbound } from '../types';
 import InboundEditor from '../components/InboundEditor';
+import { useToast } from '../components/Toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const flags = ['🇩🇪', '🇳🇱', '🇯🇵', '🇺🇸', '🇸🇬', '🇬🇧', '🇫🇷', '🇨🇦', '🌐'];
 const REALITY_TARGETS = [
@@ -15,6 +17,7 @@ const REALITY_TARGETS = [
 ];
 
 export default function Servers() {
+  const { success: toastSuccess, error: toastError } = useToast();
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -35,6 +38,8 @@ export default function Servers() {
   const [logsServer, setLogsServer] = useState<Server | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [logsInterval, setLogsInterval] = useState<ReturnType<typeof setInterval> | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; name: string } | null>(null);
+  const [confirmDeleteInbound, setConfirmDeleteInbound] = useState<{ serverId: number; inboundId: number; name: string; port: number } | null>(null);
 
   const load = useCallback(() => {
     api.servers.list().then((s) => {
@@ -61,22 +66,28 @@ export default function Servers() {
       setShowAdd(false);
       setAddForm({ name: '', host: '', port: 443, location: '', flag: '🌐', xrayVersion: '', realityDest: 'www.microsoft.com:443', realitySNI: 'www.microsoft.com' });
       load();
-    });
+      toastSuccess('Server added');
+    }).catch((e) => toastError(`Failed: ${(e as Error).message}`));
   };
 
   const handleDelete = (id: number) => {
-    api.servers.delete(id).then(load);
+    api.servers.delete(id).then(() => {
+      load();
+      toastSuccess('Server deleted');
+    });
   };
 
   const handleStart = async (id: number) => {
     setStarting(id);
     try {
       const res = await api.servers.start(id);
-      if (!res.success && res.error) {
-        alert(`Failed to start: ${res.error}`);
+      if (res.success) {
+        toastSuccess('Server started');
+      } else if (res.error) {
+        toastError(`Failed to start: ${res.error}`);
       }
     } catch (e) {
-      alert(`Error: ${(e as Error).message}`);
+      toastError(`Error: ${(e as Error).message}`);
     }
     setStarting(null);
     load();
@@ -93,8 +104,9 @@ export default function Servers() {
       await api.xray.download(version);
       const v = await api.xray.versions();
       setVersions(v);
+      toastSuccess(`Xray ${version} downloaded`);
     } catch (e) {
-      alert(`Download failed: ${(e as Error).message}`);
+      toastError(`Download failed: ${(e as Error).message}`);
     }
     setDownloading(null);
   };
@@ -103,9 +115,10 @@ export default function Servers() {
     setRestarting(id);
     try {
       const res = await api.servers.restart(id);
-      if (!res.success && res.error) alert(`Failed to restart: ${res.error}`);
+      if (res.success) toastSuccess('Server restarted');
+      else if (res.error) toastError(`Failed to restart: ${res.error}`);
     } catch (e) {
-      alert(`Error: ${(e as Error).message}`);
+      toastError(`Error: ${(e as Error).message}`);
     }
     setRestarting(null);
     load();
@@ -134,8 +147,9 @@ export default function Servers() {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+      toastSuccess('Config exported');
     } catch (e) {
-      alert(`Export failed: ${(e as Error).message}`);
+      toastError(`Export failed: ${(e as Error).message}`);
     }
   };
 
@@ -331,7 +345,7 @@ export default function Servers() {
                     </button>
                   )}
                   <button
-                    onClick={() => handleDelete(s.id)}
+                    onClick={() => setConfirmDelete({ id: s.id, name: s.name })}
                     className="py-2.5 px-3 rounded-2xl bg-red-500/10 text-red-400 text-xs font-medium hover:bg-red-500/20 transition-colors flex items-center justify-center"
                   >
                     <Trash2 size={14} />
@@ -364,11 +378,7 @@ export default function Servers() {
                           <Pencil size={13} />
                         </button>
                         <button
-                          onClick={() => {
-                            if (confirm(`Delete ${meta.name} inbound on port ${ib.port}?`)) {
-                              api.servers.deleteInbound(s.id, ib.id).then(load);
-                            }
-                          }}
+                          onClick={() => setConfirmDeleteInbound({ serverId: s.id, inboundId: ib.id, name: meta.name, port: ib.port })}
                           className="text-white/20 hover:text-red-400 transition-colors flex-shrink-0"
                         >
                           <Trash2 size={13} />
@@ -615,6 +625,39 @@ export default function Servers() {
           onSaved={load}
         />
       )}
+
+      {/* Delete server confirmation */}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Delete Server"
+        message={`Are you sure you want to delete "${confirmDelete?.name}"? This will stop the server and remove all its clients and inbounds. This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => {
+          if (confirmDelete) handleDelete(confirmDelete.id);
+          setConfirmDelete(null);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
+      {/* Delete inbound confirmation */}
+      <ConfirmDialog
+        open={!!confirmDeleteInbound}
+        title="Delete Inbound"
+        message={`Delete ${confirmDeleteInbound?.name} inbound on port ${confirmDeleteInbound?.port}? Clients using this protocol will lose connectivity.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => {
+          if (confirmDeleteInbound) {
+            api.servers.deleteInbound(confirmDeleteInbound.serverId, confirmDeleteInbound.inboundId).then(() => {
+              load();
+              toastSuccess('Inbound deleted');
+            });
+          }
+          setConfirmDeleteInbound(null);
+        }}
+        onCancel={() => setConfirmDeleteInbound(null)}
+      />
 
       {/* Logs Modal */}
       {logsServer && (

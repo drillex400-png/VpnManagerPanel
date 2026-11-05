@@ -9,6 +9,8 @@ import {
   type ProtocolType, type NetworkType, type SecurityType, type FieldDef,
 } from '../protocols';
 import type { Server, Inbound, XrayVersions } from '../types';
+import { useToast } from './Toast';
+import ConfirmDialog from './ConfirmDialog';
 
 interface Props {
   server: Server;
@@ -19,11 +21,14 @@ interface Props {
 
 export default function InboundEditor({ server, inbound, onClose, onSaved }: Props) {
   const isEdit = !!inbound;
+  const { success: toastSuccess, error: toastError } = useToast();
   const versions = useVersions();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRegen, setConfirmRegen] = useState(false);
 
   // Form state
   const [protocol, setProtocol] = useState<ProtocolType>(inbound?.protocol || 'vless');
@@ -85,7 +90,6 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
   };
 
   const handleRegenerateKeys = async () => {
-    if (!confirm('Regenerate Reality keys? All existing clients will need updated URLs.')) return;
     setRegenerating(true);
     try {
       const res = await api.servers.regenerateInboundKeys(server.id, inbound!.id);
@@ -94,8 +98,9 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
         setSecuritySettings({ ...updatedInbound.securitySettings });
       }
       onSaved();
+      toastSuccess('Reality keys regenerated');
     } catch (e) {
-      alert(`Error: ${(e as Error).message}`);
+      toastError(`Error: ${(e as Error).message}`);
     }
     setRegenerating(false);
   };
@@ -105,8 +110,9 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
     try {
       await api.xray.download(ver);
       versions.refresh();
+      toastSuccess(`Xray ${ver} downloaded`);
     } catch (e) {
-      alert(`Download failed: ${(e as Error).message}`);
+      toastError(`Download failed: ${(e as Error).message}`);
     }
     setDownloading(null);
   };
@@ -125,24 +131,24 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
         onSaved();
+        toastSuccess(isEdit ? 'Inbound updated' : 'Inbound added');
         onClose();
       })
       .catch((e) => {
         setSaving(false);
-        alert(`Save failed: ${(e as Error).message}`);
+        toastError(`Save failed: ${(e as Error).message}`);
       });
   };
 
   const handleDelete = () => {
-    if (!isEdit) return;
-    if (!confirm('Delete this inbound?')) return;
     api.servers
       .deleteInbound(server.id, inbound!.id)
       .then(() => {
         onSaved();
+        toastSuccess('Inbound deleted');
         onClose();
       })
-      .catch((e) => alert(`Delete failed: ${(e as Error).message}`));
+      .catch((e) => toastError(`Delete failed: ${(e as Error).message}`));
   };
 
   const isReality = security === 'reality';
@@ -334,7 +340,7 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
           {isReality && isEdit && (
             <>
               <button
-                onClick={handleRegenerateKeys}
+                onClick={() => setConfirmRegen(true)}
                 disabled={regenerating}
                 className="w-full mt-3 py-2.5 rounded-2xl bg-violet-500/15 text-violet-400 text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
@@ -352,7 +358,7 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
         <div className="flex gap-3">
           {isEdit && (
             <button
-              onClick={handleDelete}
+              onClick={() => setConfirmDelete(true)}
               className="px-4 py-3.5 rounded-2xl bg-red-500/15 text-red-400 text-sm font-medium flex items-center justify-center active:scale-95 transition-transform"
             >
               <Trash2 size={16} />
@@ -368,6 +374,26 @@ export default function InboundEditor({ server, inbound, onClose, onSaved }: Pro
           </button>
         </div>
       </div>
+
+      {/* Confirm dialogs */}
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete Inbound"
+        message="Delete this inbound? Clients using this protocol will lose connectivity."
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => { setConfirmDelete(false); handleDelete(); }}
+        onCancel={() => setConfirmDelete(false)}
+      />
+      <ConfirmDialog
+        open={confirmRegen}
+        title="Regenerate Reality Keys"
+        message="This will generate new X25519 keys. All existing client URLs will be invalidated and must be re-shared."
+        confirmLabel="Regenerate"
+        variant="danger"
+        onConfirm={() => { setConfirmRegen(false); handleRegenerateKeys(); }}
+        onCancel={() => setConfirmRegen(false)}
+      />
     </div>
   );
 }

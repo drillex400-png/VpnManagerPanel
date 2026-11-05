@@ -4,6 +4,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api';
 import { PROTOCOL_META } from '../protocols';
 import type { Client, ClientStatus, Server } from '../types';
+import { useToast } from '../components/Toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const filterTabs: { key: ClientStatus | 'all'; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -14,6 +16,7 @@ const filterTabs: { key: ClientStatus | 'all'; label: string }[] = [
 ];
 
 export default function Clients() {
+  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +28,8 @@ export default function Clients() {
   const [addForm, setAddForm] = useState({ name: '', email: '', serverId: 0, totalLimit: 0, expiryDate: '' });
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', totalLimit: 0, expiryDate: '' });
+  const [confirmDelete, setConfirmDelete] = useState<Client | null>(null);
+  const [confirmReset, setConfirmReset] = useState<Client | null>(null);
 
   useEffect(() => {
     Promise.all([api.clients.list(), api.servers.list()]).then(([c, s]) => {
@@ -43,16 +48,23 @@ export default function Clients() {
       setShowAdd(false);
       setAddForm({ name: '', email: '', serverId: servers[0]?.id || 0, totalLimit: 0, expiryDate: '' });
       api.clients.list().then(setClients);
-    });
+      toastSuccess('Client added');
+    }).catch((e) => toastError(`Failed: ${(e as Error).message}`));
   };
 
   const handleDelete = (id: number) => {
-    api.clients.delete(id).then(() => api.clients.list().then(setClients));
+    api.clients.delete(id).then(() => {
+      api.clients.list().then(setClients);
+      toastSuccess('Client deleted');
+    });
   };
 
   const toggleStatus = (c: Client) => {
     const newStatus = c.status === 'active' ? 'disabled' : 'active';
-    api.clients.update(c.id, { status: newStatus }).then(() => api.clients.list().then(setClients));
+    api.clients.update(c.id, { status: newStatus }).then(() => {
+      api.clients.list().then(setClients);
+      toastInfo(`${c.name} ${newStatus === 'active' ? 'enabled' : 'disabled'}`);
+    });
   };
 
   const handleEdit = (c: Client) => {
@@ -65,12 +77,15 @@ export default function Clients() {
     api.clients.update(editClient.id, editForm).then(() => {
       setEditClient(null);
       api.clients.list().then(setClients);
+      toastSuccess('Client updated');
     });
   };
 
   const handleResetStats = (id: number) => {
-    if (!confirm('Reset traffic stats for this client?')) return;
-    api.clients.resetStats(id).then(() => api.clients.list().then(setClients));
+    api.clients.resetStats(id).then(() => {
+      api.clients.list().then(setClients);
+      toastSuccess('Stats reset');
+    });
   };
 
   const copyUrl = (url: string, id: number) => {
@@ -251,7 +266,7 @@ export default function Clients() {
                   <Pencil size={14} />
                 </button>
                 <button
-                  onClick={() => handleResetStats(c.id)}
+                  onClick={() => setConfirmReset(c)}
                   className="text-white/30 hover:text-violet-400 transition-colors"
                   title="Reset traffic stats"
                 >
@@ -264,7 +279,7 @@ export default function Clients() {
                   {c.status === 'active' ? 'Disable' : 'Enable'}
                 </button>
                 <button
-                  onClick={() => handleDelete(c.id)}
+                  onClick={() => setConfirmDelete(c)}
                   className="text-white/20 hover:text-red-400 transition-colors"
                 >
                   <Trash2 size={14} />
@@ -403,6 +418,33 @@ export default function Clients() {
           </div>
         </div>
       )}
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Delete Client"
+        message={`Delete "${confirmDelete?.name}"? This will revoke their VPN access immediately. This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => {
+          if (confirmDelete) handleDelete(confirmDelete.id);
+          setConfirmDelete(null);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
+      {/* Reset stats confirmation */}
+      <ConfirmDialog
+        open={!!confirmReset}
+        title="Reset Traffic Stats"
+        message={`Reset all traffic statistics for "${confirmReset?.name}"? Upload and download counters will be set to zero.`}
+        confirmLabel="Reset"
+        onConfirm={() => {
+          if (confirmReset) handleResetStats(confirmReset.id);
+          setConfirmReset(null);
+        }}
+        onCancel={() => setConfirmReset(null)}
+      />
 
       {/* Edit Client Modal */}
       {editClient && (

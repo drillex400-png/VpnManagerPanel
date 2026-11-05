@@ -5,19 +5,25 @@ import Servers from './pages/Servers';
 import Clients from './pages/Clients';
 import Traffic from './pages/Traffic';
 import SettingsPage from './pages/Settings';
+import { ToastProvider } from './components/Toast';
+import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/servers" element={<Servers />} />
-          <Route path="/clients" element={<Clients />} />
-          <Route path="/traffic" element={<Traffic />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <ToastProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/servers" element={<Servers />} />
+              <Route path="/clients" element={<Clients />} />
+              <Route path="/traffic" element={<Traffic />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

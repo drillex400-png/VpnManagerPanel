@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Save, RotateCcw, Cpu, HardDrive, Calendar, Check, Shield, Zap, Network } from 'lucide-react';
 import { api } from '../api';
 import type { Settings as SettingsType, XrayVersions } from '../types';
+import { useToast } from '../components/Toast';
 
 export default function SettingsPage() {
+  const { success: toastSuccess, error: toastError } = useToast();
   const [settings, setSettings] = useState<SettingsType | null>(null);
   const [versions, setVersions] = useState<XrayVersions | null>(null);
   const [saving, setSaving] = useState(false);
@@ -43,8 +45,9 @@ export default function SettingsPage() {
       await api.xray.download(version);
       const v = await api.xray.versions();
       setVersions(v);
+      toastSuccess(`Xray ${version} downloaded`);
     } catch (e) {
-      alert(`Download failed: ${(e as Error).message}`);
+      toastError(`Download failed: ${(e as Error).message}`);
     }
     setDownloading(null);
   };
