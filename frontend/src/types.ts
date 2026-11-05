@@ -115,6 +115,23 @@ export interface XrayVersions {
   default: string;
 }
 
+export interface Settings {
+  defaultXrayVersion: string;
+  defaultRealityDest: string;
+  defaultRealitySNI: string;
+  defaultTotalLimit: number;
+  defaultExpiryDays: number;
+}
+
+export interface ServerLogs {
+  logs: string[];
+}
+
+export interface ServerConfig {
+  config: string;
+  filename: string;
+}
+
 export const PROTOCOL_META: Record<string, { name: string; color: string }> = {
   vless: { name: 'VLESS + Reality', color: '#8B5CF6' },
 };

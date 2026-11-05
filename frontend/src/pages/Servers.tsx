@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, ChevronDown, Cpu, HardDrive, MemoryStick, Trash2, X, Globe, Wifi, Play, Square, Download, Key, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, Search, ChevronDown, Cpu, HardDrive, MemoryStick, Trash2, X, Globe, Wifi, Play, Square, Download, Key, AlertCircle, Loader2, RotateCcw, FileDown, ScrollText, Pencil } from 'lucide-react';
 import { api } from '../api';
 import { PROTOCOL_META } from '../types';
 import type { Server, PingData, XrayVersions } from '../types';
@@ -26,7 +26,14 @@ export default function Servers() {
   const [versions, setVersions] = useState<XrayVersions | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [starting, setStarting] = useState<number | null>(null);
+  const [restarting, setRestarting] = useState<number | null>(null);
+  const [regenerating, setRegenerating] = useState<number | null>(null);
   const [pings, setPings] = useState<PingData[]>([]);
+  const [editServer, setEditServer] = useState<Server | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', host: '', port: 443, location: '', flag: '🌐' });
+  const [logsServer, setLogsServer] = useState<Server | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [logsInterval, setLogsInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(() => {
     api.servers.list().then((s) => {
@@ -90,6 +97,78 @@ export default function Servers() {
       alert(`Download failed: ${(e as Error).message}`);
     }
     setDownloading(null);
+  };
+
+  const handleRestart = async (id: number) => {
+    setRestarting(id);
+    try {
+      const res = await api.servers.restart(id);
+      if (!res.success && res.error) alert(`Failed to restart: ${res.error}`);
+    } catch (e) {
+      alert(`Error: ${(e as Error).message}`);
+    }
+    setRestarting(null);
+    load();
+  };
+
+  const handleRegenerateKeys = async (id: number) => {
+    if (!confirm('Regenerate Reality keys? Existing clients will need updated URLs.')) return;
+    setRegenerating(id);
+    try {
+      await api.servers.regenerateKeys(id);
+      load();
+    } catch (e) {
+      alert(`Error: ${(e as Error).message}`);
+    }
+    setRegenerating(null);
+  };
+
+  const handleEdit = (s: Server) => {
+    setEditServer(s);
+    setEditForm({ name: s.name, host: s.host, port: s.port, location: s.location, flag: s.flag });
+  };
+
+  const handleEditSave = () => {
+    if (!editServer) return;
+    api.servers.update(editServer.id, editForm).then(() => {
+      setEditServer(null);
+      load();
+    });
+  };
+
+  const handleExportConfig = async (id: number) => {
+    try {
+      const { config, filename } = await api.servers.config(id);
+      const blob = new Blob([config], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(`Export failed: ${(e as Error).message}`);
+    }
+  };
+
+  const openLogs = (s: Server) => {
+    setLogsServer(s);
+    api.servers.logs(s.id).then((r) => setLogs(r.logs));
+    const interval = setInterval(() => {
+      api.servers.logs(s.id).then((r) => setLogs(r.logs));
+    }, 2000);
+    setLogsInterval(interval);
+  };
+
+  const closeLogs = () => {
+    if (logsInterval) clearInterval(logsInterval);
+    setLogsInterval(null);
+    setLogsServer(null);
+    setLogs([]);
+  };
+
+  const clearLogs = (id: number) => {
+    api.servers.clearLogs(id).then(() => setLogs([]));
   };
 
   const filtered = servers.filter(
@@ -228,7 +307,7 @@ export default function Servers() {
                   </div>
                 )}
 
-                {/* Start/Stop controls */}
+                {/* Start/Stop/Restart controls */}
                 <div className="flex gap-2">
                   {s.status !== 'running' ? (
                     <button
@@ -237,21 +316,61 @@ export default function Servers() {
                       className="flex-1 py-2.5 rounded-2xl bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       {starting === s.id ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                      {starting === s.id ? 'Starting...' : 'Start Xray'}
+                      {starting === s.id ? 'Starting...' : 'Start'}
                     </button>
                   ) : (
                     <button
                       onClick={() => handleStop(s.id)}
                       className="flex-1 py-2.5 rounded-2xl bg-amber-500/15 text-amber-400 text-xs font-medium hover:bg-amber-500/25 transition-colors flex items-center justify-center gap-1.5"
                     >
-                      <Square size={14} /> Stop Xray
+                      <Square size={14} /> Stop
+                    </button>
+                  )}
+                  {s.status === 'running' && (
+                    <button
+                      onClick={() => handleRestart(s.id)}
+                      disabled={restarting === s.id}
+                      className="flex-1 py-2.5 rounded-2xl bg-violet-500/15 text-violet-400 text-xs font-medium hover:bg-violet-500/25 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    >
+                      {restarting === s.id ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                      {restarting === s.id ? '...' : 'Restart'}
                     </button>
                   )}
                   <button
                     onClick={() => handleDelete(s.id)}
-                    className="py-2.5 px-4 rounded-2xl bg-red-500/10 text-red-400 text-xs font-medium hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1.5"
+                    className="py-2.5 px-3 rounded-2xl bg-red-500/10 text-red-400 text-xs font-medium hover:bg-red-500/20 transition-colors flex items-center justify-center"
                   >
                     <Trash2 size={14} />
+                  </button>
+                </div>
+
+                {/* Secondary actions */}
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => handleEdit(s)}
+                    className="flex-1 py-2 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Pencil size={12} /> Edit
+                  </button>
+                  <button
+                    onClick={() => handleRegenerateKeys(s.id)}
+                    disabled={regenerating === s.id}
+                    className="flex-1 py-2 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {regenerating === s.id ? <Loader2 size={12} className="animate-spin" /> : <Key size={12} />}
+                    {regenerating === s.id ? '...' : 'Regen Keys'}
+                  </button>
+                  <button
+                    onClick={() => openLogs(s)}
+                    className="flex-1 py-2 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <ScrollText size={12} /> Logs
+                  </button>
+                  <button
+                    onClick={() => handleExportConfig(s.id)}
+                    className="flex-1 py-2 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <FileDown size={12} /> Export
                   </button>
                 </div>
 
@@ -405,6 +524,118 @@ export default function Servers() {
             >
               Add Server
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Server Modal */}
+      {editServer && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setEditServer(null)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-md glass-card rounded-t-3xl p-6 animate-slide-up space-y-4 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">Edit Server</h2>
+              <button onClick={() => setEditServer(null)} className="text-white/40">
+                <X size={20} />
+              </button>
+            </div>
+            <input
+              placeholder="Server name"
+              value={editForm.name}
+              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              className="glass-input w-full px-4 py-3 text-sm"
+            />
+            <input
+              placeholder="Host / IP"
+              value={editForm.host}
+              onChange={(e) => setEditForm({ ...editForm, host: e.target.value })}
+              className="glass-input w-full px-4 py-3 text-sm"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="number"
+                placeholder="Port"
+                value={editForm.port}
+                onChange={(e) => setEditForm({ ...editForm, port: Number(e.target.value) })}
+                className="glass-input w-full px-4 py-3 text-sm"
+              />
+              <input
+                placeholder="Location"
+                value={editForm.location}
+                onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                className="glass-input w-full px-4 py-3 text-sm"
+              />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {flags.map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setEditForm({ ...editForm, flag: f })}
+                  className={`text-xl p-1.5 rounded-xl transition-all ${editForm.flag === f ? 'bg-violet-500/20 ring-1 ring-violet-500/50' : 'bg-white/5'}`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleEditSave}
+              disabled={!editForm.name || !editForm.host}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition-transform"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Logs Modal */}
+      {logsServer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={closeLogs}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div
+            className="relative glass-card m-4 p-5 max-w-md w-full max-h-[70vh] flex flex-col animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ScrollText size={16} className="text-violet-400" />
+                <h2 className="text-base font-bold">{logsServer.flag} {logsServer.name}</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => clearLogs(logsServer.id)}
+                  className="text-[10px] px-2 py-1 rounded-lg bg-white/5 text-white/40 hover:text-white/70"
+                >
+                  Clear
+                </button>
+                <button onClick={closeLogs} className="text-white/40">
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto bg-black/40 rounded-2xl p-3 space-y-0.5">
+              {logs.length === 0 ? (
+                <p className="text-xs text-white/30 text-center py-8">No logs yet. Start the server to see logs.</p>
+              ) : (
+                logs.map((line, i) => (
+                  <p
+                    key={i}
+                    className={`text-[10px] font-mono leading-relaxed ${
+                      line.includes('[stderr]') || line.toLowerCase().includes('error') ? 'text-red-400' : 'text-white/50'
+                    }`}
+                  >
+                    {line}
+                  </p>
+                ))
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 mt-2 justify-center">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[9px] text-white/30">live</span>
+            </div>
           </div>
         </div>
       )}

@@ -12,6 +12,10 @@ const XRAY_CFG_DIR = process.env.XRAY_CFG_DIR || join(process.cwd(), '.xray-conf
 // Track running xray processes: serverId -> ChildProcess
 const processes = new Map<number, ChildProcess>();
 
+// Log buffer per server: serverId -> string[]
+const logBuffers = new Map<number, string[]>();
+const MAX_LOG_LINES = 500;
+
 // Ensure directories exist
 mkdirSync(XRAY_BIN_DIR, { recursive: true });
 mkdirSync(XRAY_CFG_DIR, { recursive: true });
@@ -143,9 +147,21 @@ export async function startServer(
 
     let started = false;
     let errorMsg = '';
+    let buf = logBuffers.get(server.id) || [];
+    buf.push(`[${new Date().toISOString()}] Starting Xray ${server.xrayVersion} on port ${server.port}...`);
+    logBuffers.set(server.id, buf);
+
+    const appendLog = (text: string) => {
+      const lines = text.split('\n').filter((l: string) => l.trim());
+      let b = logBuffers.get(server.id);
+      if (!b) { b = []; logBuffers.set(server.id, b); }
+      b.push(...lines);
+      if (b.length > MAX_LOG_LINES) b.splice(0, b.length - MAX_LOG_LINES);
+    };
 
     proc.stdout?.on('data', (data) => {
       const text = data.toString();
+      appendLog(text);
       if (!started && text.includes('started')) {
         started = true;
         processes.set(server.id, proc);
@@ -154,7 +170,9 @@ export async function startServer(
     });
 
     proc.stderr?.on('data', (data) => {
-      errorMsg += data.toString();
+      const text = data.toString();
+      errorMsg += text;
+      appendLog(`[stderr] ${text}`);
     });
 
     proc.on('error', (err) => {
@@ -174,6 +192,7 @@ export async function startServer(
       if (!started && !proc.killed) {
         // Check if process is still alive — assume it started successfully
         processes.set(server.id, proc);
+        appendLog('[xray] Process assumed running (timeout-based start)');
         resolve({ ok: true });
       } else if (!started) {
         resolve({ ok: false, error: errorMsg || 'xray failed to start' });
@@ -269,6 +288,38 @@ export function tcpPing(host: string, port: number, timeout = 3000): Promise<num
 }
 
 /**
+ * Get accumulated logs for a server.
+ */
+export function getServerLogs(serverId: number): string[] {
+  return logBuffers.get(serverId) || [];
+}
+
+/**
+ * Clear logs for a server.
+ */
+export function clearServerLogs(serverId: number): void {
+  logBuffers.set(serverId, []);
+}
+
+/**
+ * Restart an xray process (stop + start).
+ */
+export async function restartServer(
+  server: ServerData,
+  clients: ClientData[],
+): Promise<{ ok: boolean; error?: string }> {
+  stopServer(server.id);
+  return startServer(server, clients);
+}
+
+/**
+ * Get the config file path for a server (for export).
+ */
+export function getServerConfigPath(server: ServerData, clients: ClientData[]): string {
+  return writeConfig(server, clients);
+}
+
+/**
  * Reset all process tracking (called on backend restart).
  */
 export function resetProcesses(): void {
@@ -280,4 +331,5 @@ export function resetProcesses(): void {
     }
   }
   processes.clear();
+  logBuffers.clear();
 }

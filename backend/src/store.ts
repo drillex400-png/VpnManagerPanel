@@ -58,24 +58,49 @@ interface TrafficPoint {
   download: number;
 }
 
+interface Settings {
+  defaultXrayVersion: string;
+  defaultRealityDest: string;
+  defaultRealitySNI: string;
+  defaultTotalLimit: number;
+  defaultExpiryDays: number;
+}
+
 interface State {
   servers: ServerData[];
   clients: ClientData[];
   traffic: TrafficPoint[];
+  settings: Settings;
 }
 
 const DEFAULT_XRAY_VERSION = 'v25.10.15';
+
+const DEFAULT_SETTINGS: Settings = {
+  defaultXrayVersion: DEFAULT_XRAY_VERSION,
+  defaultRealityDest: 'www.microsoft.com:443',
+  defaultRealitySNI: 'www.microsoft.com',
+  defaultTotalLimit: 0,
+  defaultExpiryDays: 30,
+};
 
 function loadState(): State {
   if (existsSync(DATA_FILE)) {
     try {
       const raw = readFileSync(DATA_FILE, 'utf-8');
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      // Ensure settings exist (migration for older state files)
+      if (!parsed.settings) parsed.settings = DEFAULT_SETTINGS;
+      return parsed;
     } catch {
       // corrupt file — start fresh
     }
   }
-  return { servers: [], clients: [], traffic: [] };
+  return {
+    servers: [],
+    clients: [],
+    traffic: [],
+    settings: { ...DEFAULT_SETTINGS },
+  };
 }
 
 let state: State = loadState();
@@ -95,6 +120,16 @@ export const store = {
 
   get traffic(): TrafficPoint[] {
     return state.traffic;
+  },
+
+  get settings(): Settings {
+    return state.settings;
+  },
+
+  updateSettings(patch: Partial<Settings>): Settings {
+    state.settings = { ...state.settings, ...patch };
+    save();
+    return state.settings;
   },
 
   nextServerId(): number {
@@ -164,8 +199,23 @@ export const store = {
 
   deleteServer(id: number): void {
     state.servers = state.servers.filter((s) => s.id !== id);
-    state.clients = state.clients.filter((c) => c.serverId !== id);
+    state.clients = state.clients.filter((c) => c.serverId === id);
     save();
+  },
+
+  regenerateServerKeys(id: number): ServerData | null {
+    const idx = state.servers.findIndex((s) => s.id === id);
+    if (idx === -1) return null;
+    const keys = generateX25519KeyPair();
+    const shortIds = generateShortIds(2);
+    state.servers[idx] = {
+      ...state.servers[idx],
+      realityPublicKey: keys.publicKey,
+      realityPrivateKey: keys.privateKey,
+      realityShortIds: shortIds,
+    };
+    save();
+    return state.servers[idx];
   },
 
   getServer(id: number): ServerData | undefined {
@@ -221,6 +271,18 @@ export const store = {
     }
     state.clients = state.clients.filter((c) => c.id !== id);
     save();
+  },
+
+  resetClientStats(id: number): ClientData | null {
+    const idx = state.clients.findIndex((c) => c.id === id);
+    if (idx === -1) return null;
+    state.clients[idx] = {
+      ...state.clients[idx],
+      upload: 0,
+      download: 0,
+    };
+    save();
+    return state.clients[idx];
   },
 
   getClientsByServer(serverId: number): ClientData[] {

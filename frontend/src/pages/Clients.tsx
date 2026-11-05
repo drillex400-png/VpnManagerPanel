@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, Copy, X, Clock, Trash2, Wifi, QrCode, Check } from 'lucide-react';
+import { Plus, Search, Copy, X, Clock, Trash2, Wifi, QrCode, Check, Pencil, RotateCcw } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api';
 import { PROTOCOL_META } from '../types';
@@ -23,6 +23,8 @@ export default function Clients() {
   const [qrClient, setQrClient] = useState<Client | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
   const [addForm, setAddForm] = useState({ name: '', email: '', serverId: 0, totalLimit: 0, expiryDate: '' });
+  const [editClient, setEditClient] = useState<Client | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', totalLimit: 0, expiryDate: '' });
 
   useEffect(() => {
     Promise.all([api.clients.list(), api.servers.list()]).then(([c, s]) => {
@@ -51,6 +53,24 @@ export default function Clients() {
   const toggleStatus = (c: Client) => {
     const newStatus = c.status === 'active' ? 'disabled' : 'active';
     api.clients.update(c.id, { status: newStatus }).then(() => api.clients.list().then(setClients));
+  };
+
+  const handleEdit = (c: Client) => {
+    setEditClient(c);
+    setEditForm({ name: c.name, email: c.email, totalLimit: c.totalLimit, expiryDate: c.expiryDate });
+  };
+
+  const handleEditSave = () => {
+    if (!editClient) return;
+    api.clients.update(editClient.id, editForm).then(() => {
+      setEditClient(null);
+      api.clients.list().then(setClients);
+    });
+  };
+
+  const handleResetStats = (id: number) => {
+    if (!confirm('Reset traffic stats for this client?')) return;
+    api.clients.resetStats(id).then(() => api.clients.list().then(setClients));
   };
 
   const copyUrl = (url: string, id: number) => {
@@ -218,6 +238,20 @@ export default function Clients() {
                   {copied === c.id ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                 </button>
                 <button
+                  onClick={() => handleEdit(c)}
+                  className="text-white/30 hover:text-violet-400 transition-colors"
+                  title="Edit client"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => handleResetStats(c.id)}
+                  className="text-white/30 hover:text-violet-400 transition-colors"
+                  title="Reset traffic stats"
+                >
+                  <RotateCcw size={14} />
+                </button>
+                <button
                   onClick={() => toggleStatus(c)}
                   className={`text-[10px] px-2 py-1 rounded-lg ${c.status === 'active' ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}
                 >
@@ -331,6 +365,58 @@ export default function Clients() {
               className="w-full mt-4 py-3 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
               {copied === qrClient.id ? <Check size={14} /> : <Copy size={14} />} Copy VLESS URL
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Client Modal */}
+      {editClient && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setEditClient(null)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-md glass-card rounded-t-3xl p-6 animate-slide-up space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">Edit Client</h2>
+              <button onClick={() => setEditClient(null)} className="text-white/40">
+                <X size={20} />
+              </button>
+            </div>
+            <input
+              placeholder="Name"
+              value={editForm.name}
+              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              className="glass-input w-full px-4 py-3 text-sm"
+            />
+            <input
+              placeholder="Email"
+              value={editForm.email}
+              onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+              className="glass-input w-full px-4 py-3 text-sm"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="number"
+                placeholder="Data limit (GB, 0=∞)"
+                value={editForm.totalLimit}
+                onChange={(e) => setEditForm({ ...editForm, totalLimit: Number(e.target.value) })}
+                className="glass-input w-full px-4 py-3 text-sm"
+              />
+              <input
+                type="date"
+                value={editForm.expiryDate}
+                onChange={(e) => setEditForm({ ...editForm, expiryDate: e.target.value })}
+                className="glass-input w-full px-4 py-3 text-sm"
+              />
+            </div>
+            <button
+              onClick={handleEditSave}
+              disabled={!editForm.name || !editForm.email}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition-transform"
+            >
+              Save Changes
             </button>
           </div>
         </div>

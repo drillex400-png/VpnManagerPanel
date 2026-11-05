@@ -1,11 +1,12 @@
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Server, Users, Activity } from 'lucide-react';
+import { LayoutDashboard, Server, Users, Activity, Settings } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/servers', icon: Server, label: 'Servers' },
   { to: '/clients', icon: Users, label: 'Clients' },
   { to: '/traffic', icon: Activity, label: 'Traffic' },
+  { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 export default function Layout() {

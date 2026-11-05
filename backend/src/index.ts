@@ -7,11 +7,16 @@ import {
   downloadVersion,
   startServer,
   stopServer,
+  restartServer,
   isServerRunning,
   queryStats,
   tcpPing,
   resetProcesses,
+  getServerLogs,
+  clearServerLogs,
+  getServerConfigPath,
 } from './xray/manager';
+import { readFileSync } from 'fs';
 import { generateVlessUrl } from './xray/vless';
 import type { ServerData, ClientData } from './store';
 
@@ -204,6 +209,62 @@ app.post('/api/servers/:id/stop', (req, res) => {
   res.json({ success: true });
 });
 
+// Restart xray process
+app.post('/api/servers/:id/restart', async (req, res) => {
+  const id = Number(req.params.id);
+  const server = store.getServer(id);
+  if (!server) return res.status(404).json({ error: 'Server not found' });
+
+  const clients = store.getClientsByServer(id);
+  const result = await restartServer(server, clients);
+
+  if (result.ok) {
+    store.updateServer(id, { status: 'running', error: undefined });
+  } else {
+    store.updateServer(id, { status: 'error', error: result.error });
+  }
+
+  res.json({ success: result.ok, error: result.error });
+});
+
+// Regenerate Reality keys
+app.post('/api/servers/:id/regenerate-keys', (req, res) => {
+  const id = Number(req.params.id);
+  const server = store.getServer(id);
+  if (!server) return res.status(404).json({ error: 'Server not found' });
+
+  const updated = store.regenerateServerKeys(id);
+  res.json({ success: true, server: updated });
+});
+
+// Get server logs
+app.get('/api/servers/:id/logs', (req, res) => {
+  const id = Number(req.params.id);
+  res.json({ logs: getServerLogs(id) });
+});
+
+// Clear server logs
+app.delete('/api/servers/:id/logs', (req, res) => {
+  const id = Number(req.params.id);
+  clearServerLogs(id);
+  res.json({ success: true });
+});
+
+// Export server config
+app.get('/api/servers/:id/config', (req, res) => {
+  const id = Number(req.params.id);
+  const server = store.getServer(id);
+  if (!server) return res.status(404).json({ error: 'Server not found' });
+  const clients = store.getClientsByServer(id);
+  const configPath = getServerConfigPath(server, clients);
+  try {
+    const config = readFileSync(configPath, 'utf-8');
+    res.json({ config, filename: `server-${id}-config.json` });
+  } catch {
+    res.status(500).json({ error: 'Failed to read config' });
+  }
+});
+
 // Clients
 app.get('/api/clients', (_req, res) => {
   res.json(store.clients.map(clientWithVless));
@@ -257,6 +318,14 @@ app.delete('/api/clients/:id', (req, res) => {
   }
 
   res.json({ success: true });
+});
+
+// Reset client traffic stats
+app.post('/api/clients/:id/reset-stats', (req, res) => {
+  const id = Number(req.params.id);
+  const updated = store.resetClientStats(id);
+  if (!updated) return res.status(404).json({ error: 'Client not found' });
+  res.json(clientWithVless(updated));
 });
 
 // Traffic
@@ -336,6 +405,16 @@ app.get('/api/ping', async (_req, res) => {
     }),
   );
   res.json(results);
+});
+
+// Settings
+app.get('/api/settings', (_req, res) => {
+  res.json(store.settings);
+});
+
+app.put('/api/settings', (req, res) => {
+  const updated = store.updateSettings(req.body);
+  res.json(updated);
 });
 
 app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
