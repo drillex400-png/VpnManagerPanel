@@ -1,4 +1,4 @@
-import type { DashboardData, Server, Client, TrafficData, Notification, PingData, XrayVersions, Settings, ServerLogs, ServerConfig, Inbound } from './types';
+import type { DashboardData, Server, Client, TrafficData, Notification, PingData, XrayVersions, Settings, ServerLogs, ServerConfig, Inbound, BulkResult } from './types';
 
 const BASE = '/api';
 
@@ -6,10 +6,15 @@ function getAuthToken(): string | null {
   return localStorage.getItem('auth_token');
 }
 
-async function req<T>(url: string, opts?: RequestInit): Promise<T> {
-  const token = getAuthToken();
+function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = getAuthToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
+async function req<T>(url: string, opts?: RequestInit): Promise<T> {
+  const headers = getAuthHeaders();
   const res = await fetch(`${BASE}${url}`, {
     headers,
     ...opts,
@@ -61,6 +66,8 @@ export const api = {
     update: (id: number, data: Partial<Client>) => req<Client>(`/clients/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) => req<{ success: boolean }>(`/clients/${id}`, { method: 'DELETE' }),
     resetStats: (id: number) => req<Client>(`/clients/${id}/reset-stats`, { method: 'POST' }),
+    bulk: (ids: number[], action: string) => req<BulkResult>('/clients/bulk', { method: 'POST', body: JSON.stringify({ ids, action }) }),
+    exportCsv: () => fetch(`${BASE}/clients/export`, { headers: getAuthHeaders() }).then((r) => r.blob()),
   },
   traffic: (days = 30) => req<TrafficData>(`/traffic?days=${days}`),
   notifications: () => req<Notification[]>('/notifications'),
@@ -72,6 +79,7 @@ export const api = {
   settings: {
     get: () => req<Settings>('/settings'),
     update: (data: Partial<Settings>) => req<Settings>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
+    telegramTest: () => req<{ success: boolean }>('/settings/telegram-test', { method: 'POST' }),
   },
   backup: {
     export: () => req<{ servers: any[]; clients: any[]; traffic: any[]; settings: Settings; exportedAt: string }>('/backup'),

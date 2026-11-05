@@ -77,7 +77,8 @@ h1, h2, h3, .font-display {
     color: rgba(255, 255, 255, 0.28);
   }
   .fab {
-    @apply fixed bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center z-40 transition-transform active:scale-95;
+    @apply fixed right-4 w-14 h-14 rounded-full flex items-center justify-center z-40 transition-transform active:scale-95;
+    bottom: 6rem;
     background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
     box-shadow: 0 8px 24px rgba(139, 92, 246, 0.45), 0 2px 8px rgba(0, 0, 0, 0.4);
   }

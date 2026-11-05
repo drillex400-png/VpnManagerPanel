@@ -4,7 +4,6 @@ import { Server as ServerIcon, Users, TrendingUp, Activity, AlertCircle, AlertTr
 import { PageLoading, PageError } from '../components/PageState';
 import { api } from '../api';
 import type { DashboardData, Notification } from '../types';
-import NotificationsPanel from '../components/NotificationsPanel';
 import PingWidget from '../components/PingWidget';
 
 const notifConfig: Record<string, { icon: typeof AlertCircle; color: string; bg: string }> = {
@@ -66,17 +65,9 @@ export default function Dashboard() {
   return (
     <div className="px-4 py-6 space-y-5 animate-fade-in">
       {/* Заголовок */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-[1.7rem] font-bold font-display">Xray Панель</h1>
-          <p className="text-sm text-white/40">Центр управления мультипротокольным VPN</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <NotificationsPanel />
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white font-semibold text-sm">
-            АД
-          </div>
-        </div>
+      <div>
+        <h1 className="text-[1.7rem] font-bold font-display">Xray Панель</h1>
+        <p className="text-sm text-white/40">Центр управления мультипротокольным VPN</p>
       </div>
 
       {/* Ядро Xray */}

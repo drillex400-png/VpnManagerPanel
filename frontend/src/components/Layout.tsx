@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Server, Users, Activity, Settings, Menu, X, LogOut } from 'lucide-react';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { LayoutDashboard, Server, Users, Activity, Settings, LogOut, Bell } from 'lucide-react';
 import { api } from '../api';
+import { useEffect, useState } from 'react';
+import type { Notification } from '../types';
 
 const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Дашборд' },
+  { to: '/', icon: LayoutDashboard, label: 'Главная' },
   { to: '/servers', icon: Server, label: 'Ноды' },
   { to: '/clients', icon: Users, label: 'Клиенты' },
   { to: '/traffic', icon: Activity, label: 'Трафик' },
@@ -12,8 +13,10 @@ const navItems = [
 ];
 
 export default function Layout() {
-  const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [unread, setUnread] = useState(0);
+  const [showLogout, setShowLogout] = useState(false);
 
   const handleLogout = () => {
     api.auth.logout().catch(() => {}).finally(() => {
@@ -22,117 +25,124 @@ export default function Layout() {
     });
   };
 
+  useEffect(() => {
+    api.notifications().then((n: Notification[]) => setUnread(n.filter((x) => !x.read).length)).catch(() => {});
+    const interval = setInterval(() => {
+      api.notifications().then((n: Notification[]) => setUnread(n.filter((x) => !x.read).length)).catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [location.pathname]);
+
   return (
-    <div className="min-h-screen text-white max-w-md mx-auto relative">
-      {/* Top bar with hamburger */}
-      <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 px-4 pt-3 pb-2"
-        style={{ background: 'linear-gradient(180deg, rgba(7,7,12,0.95) 0%, rgba(7,7,12,0.7) 70%, transparent 100%)' }}>
-        <div className="flex items-center justify-between">
+    <div className="min-h-screen text-white max-w-md mx-auto relative flex flex-col">
+      {/* Top bar */}
+      <header
+        className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 px-4 pt-3 pb-2 flex items-center justify-between"
+        style={{ background: 'linear-gradient(180deg, rgba(7,7,12,0.95) 0%, rgba(7,7,12,0.7) 70%, transparent 100%)' }}
+      >
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
+            <Server size={14} className="text-white" />
+          </div>
+          <span className="text-sm font-bold font-display tracking-tight">Xray Панель</span>
+        </div>
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setOpen(true)}
-            className="w-11 h-11 rounded-2xl glass flex items-center justify-center active:scale-95 transition-transform"
-            aria-label="Open menu"
+            onClick={() => navigate('/')}
+            className="w-10 h-10 rounded-2xl glass flex items-center justify-center relative active:scale-95 transition-transform"
           >
-            <Menu size={20} className="text-violet-300" />
+            <Bell size={18} className="text-white/60" />
+            {unread > 0 && (
+              <span className="absolute top-0.5 right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-[9px] font-bold flex items-center justify-center">
+                {unread > 9 ? '9+' : unread}
+              </span>
+            )}
           </button>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
-              <Server size={14} className="text-white" />
-            </div>
-            <span className="text-sm font-bold font-display tracking-tight">Xray Панель</span>
-          </div>
-          <div className="w-11 h-11 rounded-2xl glass flex items-center justify-center">
+          <button
+            onClick={() => setShowLogout(true)}
+            className="w-10 h-10 rounded-2xl glass flex items-center justify-center active:scale-95 transition-transform"
+          >
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white font-semibold text-xs">
-              AD
+              АД
             </div>
-          </div>
+          </button>
         </div>
       </header>
 
-      {/* Backdrop */}
-      {open && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-fade-in"
-          onClick={() => setOpen(false)}
-        />
-      )}
+      {/* Main content */}
+      <main className="flex-1 pt-16 pb-24 min-h-screen">
+        <div key={location.pathname} className="animate-fade-in">
+          <Outlet />
+        </div>
+      </main>
 
-      {/* Side drawer */}
+      {/* Bottom navigation */}
       <nav
-        className={`fixed top-0 left-0 h-full w-72 z-50 transition-transform duration-300 ease-out ${
-          open ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 px-3 pb-3 pt-1"
+        style={{ background: 'linear-gradient(0deg, rgba(7,7,12,0.95) 0%, rgba(7,7,12,0.7) 70%, transparent 100%)' }}
       >
-        <div className="h-full glass rounded-r-[2rem] flex flex-col p-5 pt-6">
-          {/* Drawer header */}
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
-                <Server size={18} className="text-white" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold font-display">Xray Панель</h2>
-                <p className="text-[10px] text-white/40">Центр управления VPN</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setOpen(false)}
-              className="w-9 h-9 rounded-xl glass-soft flex items-center justify-center text-white/40 hover:text-white/70 transition-colors"
+        <div className="glass rounded-[1.75rem] p-1.5 flex items-center justify-around">
+          {navItems.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) =>
+                `relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-200 ${
+                  isActive ? 'text-violet-300' : 'text-white/40'
+                }`
+              }
             >
-              <X size={18} />
-            </button>
-          </div>
-
-          {/* Navigation links */}
-          <div className="flex-1 space-y-1.5">
-            {navItems.map(({ to, icon: Icon, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === '/'}
-                onClick={() => setOpen(false)}
-                className={({ isActive }) =>
-                  `relative flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-                    isActive
-                      ? 'bg-violet-500/15 text-violet-300'
-                      : 'text-white/50 hover:text-white/80 hover:bg-white/5'
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && (
-                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-full bg-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.5)]" />
-                    )}
-                    <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                    <span className="text-sm font-medium">{label}</span>
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </div>
-
-          {/* Footer */}
-          <div className="pt-4 border-t border-white/5 space-y-3">
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-all"
-            >
-              <LogOut size={20} />
-              <span className="text-sm font-medium">Выйти</span>
-            </button>
-            <p className="text-[10px] text-white/30 leading-relaxed">
-              VLESS · VMess · Trojan · Shadowsocks<br />
-              На ядре Xray-core
-            </p>
-          </div>
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <span className="absolute inset-0 rounded-2xl bg-violet-500/15" />
+                  )}
+                  <Icon size={20} strokeWidth={isActive ? 2.5 : 2} className="relative" />
+                  <span className="text-[9px] font-medium relative">{label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
         </div>
       </nav>
 
-      {/* Main content with top padding for the header */}
-      <main className="pt-16 pb-6 min-h-screen">
-        <Outlet />
-      </main>
+      {/* Logout confirmation */}
+      {showLogout && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center"
+          onClick={() => setShowLogout(false)}
+        >
+          <div
+            className="relative w-full max-w-md glass-card rounded-t-[2rem] p-6 animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                <LogOut size={18} className="text-red-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">Выйти из панели?</p>
+                <p className="text-xs text-white/40">Потребуется повторный вход</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLogout(false)}
+                className="flex-1 py-3 rounded-2xl bg-white/5 text-white/60 text-sm font-medium active:scale-95 transition-transform"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex-1 py-3 rounded-2xl bg-red-500/15 text-red-400 text-sm font-medium active:scale-95 transition-transform"
+              >
+                Выйти
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

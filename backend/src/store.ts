@@ -89,6 +89,9 @@ interface Settings {
   adminUser: string;
   adminPassword: string;
   autoLimitEnabled: boolean;
+  telegramBotToken: string;
+  telegramChatId: string;
+  telegramNotifications: boolean;
 }
 
 interface State {
@@ -109,6 +112,9 @@ const DEFAULT_SETTINGS: Settings = {
   adminUser: 'admin',
   adminPassword: 'admin',
   autoLimitEnabled: true,
+  telegramBotToken: '',
+  telegramChatId: '',
+  telegramNotifications: false,
 };
 
 // ── Migration: convert legacy Reality fields to an inbound ─────────────

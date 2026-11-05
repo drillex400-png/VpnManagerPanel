@@ -24,6 +24,14 @@ export function destroySession(token: string): void {
   sessions.delete(token);
 }
 
+// Периодическая очистка истёкших сессий
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, session] of sessions) {
+    if (now > session.expires) sessions.delete(token);
+  }
+}, 600000); // каждые 10 минут
+
 // Публичные эндпоинты, не требующие авторизации
 const PUBLIC_PATHS = ['/api/health', '/api/auth/login', '/api/auth/check'];
 

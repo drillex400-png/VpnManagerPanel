@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Save, RotateCcw, Cpu, HardDrive, Calendar, Check, Shield, Zap, Network, Lock, ToggleLeft, ToggleRight, Eye, EyeOff, Download, Upload, AlertTriangle } from 'lucide-react';
+import { Save, RotateCcw, Cpu, HardDrive, Calendar, Check, Shield, Zap, Network, Lock, ToggleLeft, ToggleRight, Eye, EyeOff, Download, Upload, AlertTriangle, Send, MessageCircle } from 'lucide-react';
 import { PageLoading, PageError } from '../components/PageState';
 import { api } from '../api';
 import type { Settings as SettingsType, XrayVersions } from '../types';
@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const [backupBusy, setBackupBusy] = useState(false);
   const [showRestore, setShowRestore] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [telegramTesting, setTelegramTesting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadSettings = () => {
@@ -78,6 +79,17 @@ export default function SettingsPage() {
       toastError(`Ошибка восстановления: ${(e as Error).message}`);
     }
     setBackupBusy(false);
+  };
+
+  const handleTelegramTest = async () => {
+    setTelegramTesting(true);
+    try {
+      await api.settings.telegramTest();
+      toastSuccess('Тестовое сообщение отправлено в Telegram');
+    } catch (e) {
+      toastError(`Ошибка: ${(e as Error).message}`);
+    }
+    setTelegramTesting(false);
   };
 
   const handleDownloadVersion = async (version: string) => {
@@ -232,6 +244,59 @@ export default function SettingsPage() {
             <Row label="Проверка" value="каждые 10 сек" />
             <Row label="Лимит трафика" value={settings.defaultTotalLimit > 0 ? `${settings.defaultTotalLimit} ГБ` : 'без лимита'} />
             <Row label="Срок действия" value={`${settings.defaultExpiryDays} дн.`} />
+          </div>
+        )}
+      </div>
+
+      {/* Telegram-уведомления */}
+      <div className="glass-card p-5 space-y-3">
+        <SectionTitle icon={MessageCircle} title="Telegram-уведомления" />
+        <button
+          onClick={() => update({ telegramNotifications: !settings.telegramNotifications })}
+          className="w-full flex items-center justify-between"
+        >
+          <div className="text-left">
+            <p className="text-sm text-white/60">Уведомления в Telegram</p>
+            <p className="text-[10px] text-white/30 mt-0.5">Статус нод, лимиты клиентов, новые подключения</p>
+          </div>
+          {settings.telegramNotifications ? (
+            <ToggleRight size={32} className="text-violet-400 flex-shrink-0" />
+          ) : (
+            <ToggleLeft size={32} className="text-white/20 flex-shrink-0" />
+          )}
+        </button>
+        {settings.telegramNotifications && (
+          <div className="space-y-2 pt-2 border-t border-white/5">
+            <div>
+              <label className="text-xs text-white/40 mb-1.5 block">Токен бота</label>
+              <input
+                type="password"
+                placeholder="123456:ABC-DEF..."
+                value={settings.telegramBotToken}
+                onChange={(e) => update({ telegramBotToken: e.target.value })}
+                className="glass-input w-full px-4 py-3 text-sm font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-white/40 mb-1.5 block">Chat ID</label>
+              <input
+                placeholder="Например: -1001234567890"
+                value={settings.telegramChatId}
+                onChange={(e) => update({ telegramChatId: e.target.value })}
+                className="glass-input w-full px-4 py-3 text-sm font-mono"
+              />
+            </div>
+            <button
+              onClick={handleTelegramTest}
+              disabled={!settings.telegramBotToken || !settings.telegramChatId || telegramTesting}
+              className="w-full py-2.5 rounded-2xl bg-violet-500/15 text-violet-400 text-xs font-medium flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              {telegramTesting ? <RotateCcw size={14} className="animate-spin" /> : <Send size={14} />}
+              {telegramTesting ? 'Отправка...' : 'Отправить тестовое сообщение'}
+            </button>
+            <p className="text-[10px] text-white/30 leading-relaxed pt-1">
+              Создайте бота через @BotFather, получите токен. Chat ID узнайте через @userinfobot или добавив бота в группу.
+            </p>
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PageLoading, PageError } from '../components/PageState';
-import { Plus, Search, Copy, X, Clock, Trash2, Wifi, QrCode, Check, Pencil, RotateCcw, Link } from 'lucide-react';
+import { Plus, Search, Copy, X, Clock, Trash2, Wifi, QrCode, Check, Pencil, RotateCcw, Link, Download, CheckSquare, Square, XCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api';
 import { PROTOCOL_META } from '../protocols';
@@ -32,6 +32,9 @@ export default function Clients() {
   const [editForm, setEditForm] = useState({ name: '', email: '', totalLimit: 0, expiryDate: '' });
   const [confirmDelete, setConfirmDelete] = useState<Client | null>(null);
   const [confirmReset, setConfirmReset] = useState<Client | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [confirmBulk, setConfirmBulk] = useState<{ action: string } | null>(null);
 
   const load = () => {
     setError('');
@@ -109,6 +112,47 @@ export default function Clients() {
     return ms && mf;
   });
 
+  const toggleSelect = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelected(new Set());
+  };
+
+  const handleBulkAction = async (action: string) => {
+    try {
+      const result = await api.clients.bulk([...selected], action);
+      toastSuccess(`Операция выполнена для ${result.count} клиентов`);
+      exitSelectMode();
+      load();
+    } catch (e) {
+      toastError(`Ошибка: ${(e as Error).message}`);
+    }
+    setConfirmBulk(null);
+  };
+
+  const handleExportCsv = async () => {
+    try {
+      const blob = await api.clients.exportCsv();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `clients-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toastSuccess('CSV экспортирован');
+    } catch (e) {
+      toastError(`Ошибка экспорта: ${(e as Error).message}`);
+    }
+  };
+
   if (loading) return <PageLoading />;
   if (error) return <PageError message={error} onRetry={load} />;
 
@@ -133,16 +177,79 @@ export default function Clients() {
         <p className="text-sm text-white/40">{clients.length} всего • {clients.filter(c => c.status === 'active').length} активны</p>
       </div>
 
-      {/* Поиск */}
-      <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Поиск клиентов..."
-          className="glass-input w-full pl-10 pr-4 py-3 text-sm"
-        />
+      {/* Действия */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Поиск клиентов..."
+            className="glass-input w-full pl-10 pr-4 py-3 text-sm"
+          />
+        </div>
+        <button
+          onClick={handleExportCsv}
+          className="w-11 h-11 rounded-2xl glass flex items-center justify-center text-white/50 active:scale-95 transition-transform flex-shrink-0"
+          title="Экспорт в CSV"
+        >
+          <Download size={18} />
+        </button>
+        <button
+          onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+          className={`w-11 h-11 rounded-2xl flex items-center justify-center active:scale-95 transition-transform flex-shrink-0 ${
+            selectMode ? 'bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40' : 'glass text-white/50'
+          }`}
+          title="Выбрать"
+        >
+          {selectMode ? <X size={18} /> : <CheckSquare size={18} />}
+        </button>
       </div>
+
+      {/* Массовые действия */}
+      {selectMode && (
+        <div className="glass-card p-3 animate-slide-down">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs text-white/50">Выбрано: {selected.size}</span>
+            <button
+              onClick={() => selected.size === filtered.length ? setSelected(new Set()) : setSelected(new Set(filtered.map((c) => c.id)))}
+              className="text-[10px] px-2 py-1 rounded-lg bg-violet-500/10 text-violet-300"
+            >
+              {selected.size === filtered.length ? 'Снять все' : 'Выбрать все'}
+            </button>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            <button
+              onClick={() => selected.size > 0 && setConfirmBulk({ action: 'enable' })}
+              disabled={selected.size === 0}
+              className="py-2 rounded-xl bg-emerald-500/10 text-emerald-400 text-[10px] font-medium disabled:opacity-30 flex items-center justify-center gap-1"
+            >
+              <Check size={12} /> Вкл
+            </button>
+            <button
+              onClick={() => selected.size > 0 && setConfirmBulk({ action: 'disable' })}
+              disabled={selected.size === 0}
+              className="py-2 rounded-xl bg-amber-500/10 text-amber-400 text-[10px] font-medium disabled:opacity-30 flex items-center justify-center gap-1"
+            >
+              <XCircle size={12} /> Откл
+            </button>
+            <button
+              onClick={() => selected.size > 0 && setConfirmBulk({ action: 'reset-stats' })}
+              disabled={selected.size === 0}
+              className="py-2 rounded-xl bg-cyan-500/10 text-cyan-400 text-[10px] font-medium disabled:opacity-30 flex items-center justify-center gap-1"
+            >
+              <RotateCcw size={12} /> Сброс
+            </button>
+            <button
+              onClick={() => selected.size > 0 && setConfirmBulk({ action: 'delete' })}
+              disabled={selected.size === 0}
+              className="py-2 rounded-xl bg-red-500/10 text-red-400 text-[10px] font-medium disabled:opacity-30 flex items-center justify-center gap-1"
+            >
+              <Trash2 size={12} /> Удал.
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Фильтры */}
       <div className="flex gap-2 overflow-x-auto">
@@ -179,7 +286,19 @@ export default function Clients() {
         const server = servers.find(s => s.id === c.serverId);
 
         return (
-          <div key={c.id} className="glass-card p-4 animate-slide-up">
+          <div key={c.id} className={`glass-card p-4 animate-slide-up ${selectMode && selected.has(c.id) ? 'ring-1 ring-violet-500/40' : ''}`}>
+            {selectMode && (
+              <button
+                onClick={() => toggleSelect(c.id)}
+                className="absolute top-3 right-3 z-10"
+              >
+                {selected.has(c.id) ? (
+                  <CheckSquare size={18} className="text-violet-400" />
+                ) : (
+                  <Square size={18} className="text-white/20" />
+                )}
+              </button>
+            )}
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500/30 to-indigo-500/20 flex items-center justify-center text-sm font-semibold">
@@ -303,14 +422,39 @@ export default function Clients() {
         );
       })}
 
-      {/* FAB */}
-      <button
-        onClick={() => setShowAdd(true)}
-        disabled={servers.length === 0}
-        className="fab disabled:opacity-30 disabled:pointer-events-none"
-      >
-        <Plus size={24} />
-      </button>
+      {/* FAB — скрыт в режиме выбора */}
+      {!selectMode && (
+        <button
+          onClick={() => setShowAdd(true)}
+          disabled={servers.length === 0}
+          className="fab disabled:opacity-30 disabled:pointer-events-none"
+        >
+          <Plus size={24} />
+        </button>
+      )}
+
+      {/* Подтверждение массовых действий */}
+      <ConfirmDialog
+        open={!!confirmBulk}
+        title={
+          confirmBulk?.action === 'delete' ? 'Удалить клиентов' :
+          confirmBulk?.action === 'enable' ? 'Включить клиентов' :
+          confirmBulk?.action === 'disable' ? 'Отключить клиентов' :
+          'Сбросить статистику'
+        }
+        message={
+          confirmBulk?.action === 'delete'
+            ? `Удалить ${selected.size} клиентов? Действие необратимо.`
+            : confirmBulk?.action === 'reset-stats'
+              ? `Сбросить статистику для ${selected.size} клиентов?`
+              : `Применить «${confirmBulk?.action === 'enable' ? 'Включить' : 'Отключить'}» к ${selected.size} клиентам?`
+        }
+        confirmLabel={confirmBulk?.action === 'delete' ? 'Удалить' : 'Применить'}
+        cancelLabel="Отмена"
+        variant={confirmBulk?.action === 'delete' ? 'danger' : 'default'}
+        onConfirm={() => confirmBulk && handleBulkAction(confirmBulk.action)}
+        onCancel={() => setConfirmBulk(null)}
+      />
 
       {/* Добавление клиента */}
       {showAdd && (

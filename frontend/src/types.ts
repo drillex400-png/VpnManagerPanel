@@ -145,6 +145,15 @@ export interface Settings {
   adminUser: string;
   adminPassword: string;
   autoLimitEnabled: boolean;
+  telegramBotToken: string;
+  telegramChatId: string;
+  telegramNotifications: boolean;
+}
+
+export interface BulkResult {
+  success: boolean;
+  count: number;
+  action: string;
 }
 
 export interface ServerLogs {
