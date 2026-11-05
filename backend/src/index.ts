@@ -30,16 +30,39 @@ store.resetStatuses();
 
 // ── Фоновые задачи ────────────────────────────────────────────────────
 
+// Хранилище предыдущих значений трафика для расчёта скорости
+const prevTraffic = new Map<number, { up: number; down: number; time: number }>();
+
 // Периодически опрашиваем статистику с запущенных нод + авто-лимиты.
 setInterval(async () => {
   for (const server of store.servers) {
     if (isServerRunning(server.id)) {
       const stats = await queryStats(server);
       if (Object.keys(stats).length > 0) {
+        // Считаем суммарный трафик и скорость
+        const totalUp = Object.values(stats).reduce((a, s) => a + s.uplink, 0);
+        const totalDown = Object.values(stats).reduce((a, s) => a + s.downlink, 0);
+        const now = Date.now();
+        const prev = prevTraffic.get(server.id);
+        let uploadSpeed = 0;
+        let downloadSpeed = 0;
+        if (prev) {
+          const dt = (now - prev.time) / 1000;
+          if (dt > 0) {
+            uploadSpeed = Math.max(0, (totalUp - prev.up) / dt / (1024 * 1024)); // МБ/с
+            downloadSpeed = Math.max(0, (totalDown - prev.down) / dt / (1024 * 1024));
+          }
+        }
+        prevTraffic.set(server.id, { up: totalUp, down: totalDown, time: now });
         store.updateTrafficStats(stats);
+        store.updateServer(server.id, {
+          totalUpload: totalUp / (1024 * 1024 * 1024),
+          totalDownload: totalDown / (1024 * 1024 * 1024),
+          uploadSpeed: Number(uploadSpeed.toFixed(2)),
+          downloadSpeed: Number(downloadSpeed.toFixed(2)),
+        });
       }
       const sysStats = await getSystemStats(server);
-      const oldStatus = server.status;
       store.updateServer(server.id, sysStats);
     }
   }
@@ -71,11 +94,10 @@ setInterval(async () => {
     if (isServerRunning(server.id)) {
       const alive = await verifyRunning(server);
       if (!alive) {
-        const oldStatus = server.status;
         store.updateServer(server.id, { status: 'stopped' });
         // Telegram-уведомление
         if (store.settings.telegramNotifications) {
-          notifyServerStatus(server, oldStatus).catch(() => {});
+          notifyServerStatus(server, 'running').catch(() => {});
         }
       }
     }

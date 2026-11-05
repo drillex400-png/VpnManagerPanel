@@ -6,7 +6,7 @@ import {
   listLocalVersions,
   downloadVersion,
   isServerRunning,
-  verifyRunning,
+  startServer,
   queryStats,
   tcpPing,
 } from '../xray/manager';

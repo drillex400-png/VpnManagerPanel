@@ -41,7 +41,7 @@ export default function Servers() {
   const [testResult, setTestResult] = useState<{ ok: boolean; info?: string; error?: string } | null>(null);
   const [pings, setPings] = useState<PingData[]>([]);
   const [editServer, setEditServer] = useState<Server | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', host: '', port: 443, location: '', flag: '🌐' });
+  const [editForm, setEditForm] = useState({ name: '', host: '', port: 443, location: '', flag: '🌐', sshPort: 22, sshUser: 'root', sshAuthType: 'password' as 'key' | 'password', sshPrivateKey: '', sshPassword: '' });
   const [inboundEditor, setInboundEditor] = useState<{ server: Server; inbound?: Inbound | null } | null>(null);
   const [logsServer, setLogsServer] = useState<Server | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
@@ -155,7 +155,11 @@ export default function Servers() {
 
   const handleEdit = (s: Server) => {
     setEditServer(s);
-    setEditForm({ name: s.name, host: s.host, port: s.port, location: s.location, flag: s.flag });
+    setEditForm({
+      name: s.name, host: s.host, port: s.port, location: s.location, flag: s.flag,
+      sshPort: s.sshPort || 22, sshUser: s.sshUser || 'root',
+      sshAuthType: s.sshAuthType || 'password', sshPrivateKey: s.sshPrivateKey || '', sshPassword: s.sshPassword || '',
+    });
   };
 
   const handleEditSave = () => {
@@ -705,9 +709,64 @@ export default function Servers() {
                 </button>
               ))}
             </div>
+
+            {/* SSH-доступ */}
+            <div className="space-y-2 pt-2 border-t border-white/5">
+              <div className="flex items-center gap-1.5 text-[11px] text-white/40 font-medium">
+                <KeyRound size={12} className="text-violet-400" />
+                Доступ по SSH
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  placeholder="Пользователь"
+                  value={editForm.sshUser}
+                  onChange={(e) => setEditForm({ ...editForm, sshUser: e.target.value })}
+                  className="glass-input w-full px-4 py-3 text-sm"
+                />
+                <input
+                  type="number"
+                  placeholder="Порт SSH"
+                  value={editForm.sshPort}
+                  onChange={(e) => setEditForm({ ...editForm, sshPort: Number(e.target.value) })}
+                  className="glass-input w-full px-4 py-3 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setEditForm({ ...editForm, sshAuthType: 'password' })}
+                  className={`py-2.5 rounded-2xl text-xs font-medium transition-all ${editForm.sshAuthType === 'password' ? 'bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40' : 'bg-white/5 text-white/50'}`}
+                >
+                  По паролю
+                </button>
+                <button
+                  onClick={() => setEditForm({ ...editForm, sshAuthType: 'key' })}
+                  className={`py-2.5 rounded-2xl text-xs font-medium transition-all ${editForm.sshAuthType === 'key' ? 'bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40' : 'bg-white/5 text-white/50'}`}
+                >
+                  По ключу
+                </button>
+              </div>
+              {editForm.sshAuthType === 'password' ? (
+                <input
+                  type="password"
+                  placeholder="Новый пароль SSH (оставьте пустым — без изменений)"
+                  value={editForm.sshPassword}
+                  onChange={(e) => setEditForm({ ...editForm, sshPassword: e.target.value })}
+                  className="glass-input w-full px-4 py-3 text-sm font-mono"
+                />
+              ) : (
+                <textarea
+                  placeholder="Новый приватный ключ SSH (оставьте пустым — без изменений)"
+                  value={editForm.sshPrivateKey}
+                  onChange={(e) => setEditForm({ ...editForm, sshPrivateKey: e.target.value })}
+                  rows={4}
+                  className="glass-input w-full px-4 py-3 text-sm font-mono resize-none"
+                />
+              )}
+            </div>
+
             <button
               onClick={handleEditSave}
-              disabled={!editForm.name || !editForm.host}
+              disabled={!editForm.name || !editForm.host || !editForm.sshUser}
               className="btn-primary w-full py-3.5 text-sm"
             >
               Сохранить

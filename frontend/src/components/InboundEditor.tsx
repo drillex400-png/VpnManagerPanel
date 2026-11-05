@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { X, Shield, Network, Globe, Key, Cpu, Download, Loader2, RefreshCw, Check, Plus, Trash2, Radio } from 'lucide-react';
 import { api } from '../api';
 import {
@@ -484,6 +484,6 @@ function Section({ icon: Icon, title, children }: { icon: typeof Key; title: str
 function useVersions() {
   const [data, setData] = useState<XrayVersions | null>(null);
   const refresh = () => api.xray.versions().then(setData).catch(console.error);
-  useState(() => { refresh(); });
+  useEffect(() => { refresh(); }, []);
   return { data, refresh };
 }

@@ -37,6 +37,7 @@ router.post('/servers/test', async (req, res) => {
     xrayVersion: '',
     cpu: 0,
     ram: 0,
+    disk: 0,
     uptime: 0,
     clientCount: 0,
     totalUpload: 0,

@@ -1,8 +1,8 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Server, Users, Activity, Settings, LogOut, Bell } from 'lucide-react';
+import { LayoutDashboard, Server, Users, Activity, Settings, LogOut } from 'lucide-react';
 import { api } from '../api';
 import { useEffect, useState } from 'react';
-import type { Notification } from '../types';
+import NotificationsPanel from './NotificationsPanel';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Главная' },
@@ -15,7 +15,6 @@ const navItems = [
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [unread, setUnread] = useState(0);
   const [showLogout, setShowLogout] = useState(false);
 
   const handleLogout = () => {
@@ -24,14 +23,6 @@ export default function Layout() {
       navigate('/login');
     });
   };
-
-  useEffect(() => {
-    api.notifications().then((n: Notification[]) => setUnread(n.filter((x) => !x.read).length)).catch(() => {});
-    const interval = setInterval(() => {
-      api.notifications().then((n: Notification[]) => setUnread(n.filter((x) => !x.read).length)).catch(() => {});
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [location.pathname]);
 
   return (
     <div className="min-h-screen text-white max-w-md mx-auto relative flex flex-col">
@@ -47,17 +38,7 @@ export default function Layout() {
           <span className="text-sm font-bold font-display tracking-tight">Xray Панель</span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate('/')}
-            className="w-10 h-10 rounded-2xl glass flex items-center justify-center relative active:scale-95 transition-transform"
-          >
-            <Bell size={18} className="text-white/60" />
-            {unread > 0 && (
-              <span className="absolute top-0.5 right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-[9px] font-bold flex items-center justify-center">
-                {unread > 9 ? '9+' : unread}
-              </span>
-            )}
-          </button>
+          <NotificationsPanel />
           <button
             onClick={() => setShowLogout(true)}
             className="w-10 h-10 rounded-2xl glass flex items-center justify-center active:scale-95 transition-transform"
