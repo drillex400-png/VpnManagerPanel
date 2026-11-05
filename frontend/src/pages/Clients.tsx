@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { PageLoading, PageError } from '../components/PageState';
-import { Plus, Search, Copy, X, Clock, Trash2, Wifi, QrCode, Check, Pencil, RotateCcw, Link, Download, CheckSquare, Square, XCircle } from 'lucide-react';
+import { Plus, Search, Copy, X, Clock, Trash2, Wifi, QrCode, Check, Pencil, RotateCcw, Link, Download, CheckSquare, Square, XCircle, Users2, Zap } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api';
 import { PROTOCOL_META } from '../protocols';
-import type { Client, ClientStatus, Server } from '../types';
+import type { Client, ClientStatus, Server, Group } from '../types';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -35,13 +35,20 @@ export default function Clients() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirmBulk, setConfirmBulk] = useState<{ action: string } | null>(null);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [showGroups, setShowGroups] = useState(false);
+  const [groupForm, setGroupForm] = useState({ name: '', color: '#8B5CF6', defaultTotalLimit: 0, defaultExpiryDays: 30, description: '' });
+  const [editGroup, setEditGroup] = useState<Group | null>(null);
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<Group | null>(null);
+  const [applyingGroup, setApplyingGroup] = useState<number | null>(null);
 
   const load = () => {
     setError('');
     setLoading(true);
-    Promise.all([api.clients.list(), api.servers.list()]).then(([c, s]) => {
+    Promise.all([api.clients.list(), api.servers.list(), api.groups.list()]).then(([c, s, g]) => {
       setClients(c);
       setServers(s);
+      setGroups(g);
       if (s.length > 0 && addForm.serverId === 0) {
         setAddForm(prev => ({ ...prev, serverId: s[0].id }));
       }
@@ -153,6 +160,56 @@ export default function Clients() {
     }
   };
 
+  // ── Группы ──
+  const handleCreateGroup = () => {
+    if (!groupForm.name) { toastError('Укажите название группы'); return; }
+    api.groups.create(groupForm).then(() => {
+      setGroupForm({ name: '', color: '#8B5CF6', defaultTotalLimit: 0, defaultExpiryDays: 30, description: '' });
+      api.groups.list().then(setGroups);
+      toastSuccess('Группа создана');
+    }).catch((e) => toastError(`Ошибка: ${(e as Error).message}`));
+  };
+
+  const handleUpdateGroup = () => {
+    if (!editGroup) return;
+    api.groups.update(editGroup.id, {
+      name: editGroup.name, color: editGroup.color,
+      defaultTotalLimit: editGroup.defaultTotalLimit,
+      defaultExpiryDays: editGroup.defaultExpiryDays,
+      description: editGroup.description,
+    }).then(() => {
+      setEditGroup(null);
+      api.groups.list().then(setGroups);
+      toastSuccess('Группа обновлена');
+    }).catch((e) => toastError(`Ошибка: ${(e as Error).message}`));
+  };
+
+  const handleDeleteGroup = (id: number) => {
+    api.groups.delete(id).then(() => {
+      api.groups.list().then(setGroups);
+      api.clients.list().then(setClients);
+      toastSuccess('Группа удалена');
+    });
+  };
+
+  const handleAssignGroup = (clientId: number, groupId: number | undefined) => {
+    api.assignGroup(clientId, groupId).then(() => {
+      api.clients.list().then(setClients);
+      toastSuccess(groupId ? 'Клиент добавлен в группу' : 'Клиент удалён из группы');
+    }).catch((e) => toastError(`Ошибка: ${(e as Error).message}`));
+  };
+
+  const handleApplyGroup = (id: number) => {
+    setApplyingGroup(id);
+    api.groups.apply(id).then((r) => {
+      toastSuccess(`Политики применены к ${r.count} клиентам`);
+      load();
+    }).catch((e) => toastError(`Ошибка: ${(e as Error).message}`))
+    .finally(() => setApplyingGroup(null));
+  };
+
+  const groupColors = ['#8B5CF6', '#06B6D4', '#F59E0B', '#10B981', '#EF4444', '#EC4899', '#6366F1', '#F97316'];
+
   if (loading) return <PageLoading />;
   if (error) return <PageError message={error} onRetry={load} />;
 
@@ -203,6 +260,13 @@ export default function Clients() {
           title="Выбрать"
         >
           {selectMode ? <X size={18} /> : <CheckSquare size={18} />}
+        </button>
+        <button
+          onClick={() => setShowGroups(true)}
+          className="w-11 h-11 rounded-2xl glass flex items-center justify-center text-white/50 active:scale-95 transition-transform flex-shrink-0"
+          title="Группы"
+        >
+          <Users2 size={18} />
         </button>
       </div>
 
@@ -334,6 +398,18 @@ export default function Clients() {
                   {server.status === 'running' ? '●' : '○'}
                 </span>
               )}
+              {c.groupId && (() => {
+                const g = groups.find((g) => g.id === c.groupId);
+                if (!g) return null;
+                return (
+                  <span
+                    className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                    style={{ background: g.color + '15', color: g.color }}
+                  >
+                    {g.name}
+                  </span>
+                );
+              })()}
             </div>
 
             {/* Трафик */}
@@ -660,6 +736,24 @@ export default function Clients() {
                 className="glass-input w-full px-4 py-3 text-sm"
               />
             </div>
+            {/* Группа */}
+            <div>
+              <label className="text-xs text-white/40 mb-1.5 block">Группа</label>
+              <select
+                value={editClient.groupId || 0}
+                onChange={(e) => {
+                  const gid = Number(e.target.value) || undefined;
+                  handleAssignGroup(editClient.id, gid);
+                  setEditClient({ ...editClient, groupId: gid });
+                }}
+                className="glass-input w-full px-4 py-3 text-sm"
+              >
+                <option value={0} className="bg-surface">Без группы</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id} className="bg-surface">{g.name}</option>
+                ))}
+              </select>
+            </div>
             <button
               onClick={handleEditSave}
               disabled={!editForm.name || !editForm.email}
@@ -670,6 +764,203 @@ export default function Clients() {
           </div>
         </div>
       )}
+
+      {/* Управление группами */}
+      {showGroups && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowGroups(false)}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
+          <div
+            className="relative w-full max-w-md glass-card rounded-t-[2rem] p-6 animate-slide-up space-y-4 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold font-display flex items-center gap-2">
+                <Users2 size={18} className="text-violet-400" /> Группы клиентов
+              </h2>
+              <button onClick={() => setShowGroups(false)} className="text-white/40">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Существующие группы */}
+            {groups.length > 0 && (
+              <div className="space-y-2">
+                {groups.map((g) => (
+                  <div key={g.id} className="glass-soft rounded-2xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ background: g.color }} />
+                        <span className="text-sm font-medium">{g.name}</span>
+                        <span className="text-[10px] text-white/30">{g.clientCount || 0} клиентов</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleApplyGroup(g.id)}
+                          disabled={applyingGroup === g.id}
+                          className="text-[10px] px-2 py-1 rounded-lg bg-violet-500/10 text-violet-300 flex items-center gap-1 disabled:opacity-50"
+                          title="Применить политики ко всем клиентам группы"
+                        >
+                          {applyingGroup === g.id ? <RotateCcw size={10} className="animate-spin" /> : <Zap size={10} />}
+                          Применить
+                        </button>
+                        <button
+                          onClick={() => setEditGroup({ ...g })}
+                          className="text-white/30 hover:text-violet-400 transition-colors p-1"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteGroup(g)}
+                          className="text-white/20 hover:text-red-400 transition-colors p-1"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 text-[10px] text-white/30">
+                      <span>Лимит: {g.defaultTotalLimit > 0 ? `${g.defaultTotalLimit} ГБ` : '∞'}</span>
+                      <span>Срок: {g.defaultExpiryDays} дн.</span>
+                    </div>
+                    {g.description && <p className="text-[10px] text-white/30 mt-1">{g.description}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {groups.length === 0 && !editGroup && (
+              <p className="text-xs text-white/30 text-center py-4">Групп пока нет. Создайте первую.</p>
+            )}
+
+            {/* Форма создания/редактирования группы */}
+            {editGroup ? (
+              <div className="space-y-3 pt-3 border-t border-white/5">
+                <p className="text-xs font-medium text-white/60">Редактирование группы</p>
+                <input
+                  placeholder="Название группы"
+                  value={editGroup.name}
+                  onChange={(e) => setEditGroup({ ...editGroup, name: e.target.value })}
+                  className="glass-input w-full px-4 py-3 text-sm"
+                />
+                <div className="flex gap-2 flex-wrap">
+                  {groupColors.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setEditGroup({ ...editGroup, color: c })}
+                      className={`w-7 h-7 rounded-full transition-all ${editGroup.color === c ? 'ring-2 ring-white/40' : ''}`}
+                      style={{ background: c }}
+                    />
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="number"
+                    placeholder="Лимит (ГБ, 0=∞)"
+                    value={editGroup.defaultTotalLimit}
+                    onChange={(e) => setEditGroup({ ...editGroup, defaultTotalLimit: Number(e.target.value) })}
+                    className="glass-input w-full px-4 py-3 text-sm"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Срок (дней)"
+                    value={editGroup.defaultExpiryDays}
+                    onChange={(e) => setEditGroup({ ...editGroup, defaultExpiryDays: Number(e.target.value) })}
+                    className="glass-input w-full px-4 py-3 text-sm"
+                  />
+                </div>
+                <input
+                  placeholder="Описание (необязательно)"
+                  value={editGroup.description}
+                  onChange={(e) => setEditGroup({ ...editGroup, description: e.target.value })}
+                  className="glass-input w-full px-4 py-3 text-sm"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditGroup(null)}
+                    className="flex-1 py-3 rounded-2xl bg-white/5 text-white/60 text-sm font-medium"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    onClick={handleUpdateGroup}
+                    disabled={!editGroup.name}
+                    className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-sm font-semibold disabled:opacity-40"
+                  >
+                    Сохранить
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 pt-3 border-t border-white/5">
+                <p className="text-xs font-medium text-white/60">Новая группа</p>
+                <input
+                  placeholder="Название группы"
+                  value={groupForm.name}
+                  onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
+                  className="glass-input w-full px-4 py-3 text-sm"
+                />
+                <div className="flex gap-2 flex-wrap">
+                  {groupColors.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setGroupForm({ ...groupForm, color: c })}
+                      className={`w-7 h-7 rounded-full transition-all ${groupForm.color === c ? 'ring-2 ring-white/40' : ''}`}
+                      style={{ background: c }}
+                    />
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="number"
+                    placeholder="Лимит (ГБ, 0=∞)"
+                    value={groupForm.defaultTotalLimit}
+                    onChange={(e) => setGroupForm({ ...groupForm, defaultTotalLimit: Number(e.target.value) })}
+                    className="glass-input w-full px-4 py-3 text-sm"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Срок (дней)"
+                    value={groupForm.defaultExpiryDays}
+                    onChange={(e) => setGroupForm({ ...groupForm, defaultExpiryDays: Number(e.target.value) })}
+                    className="glass-input w-full px-4 py-3 text-sm"
+                  />
+                </div>
+                <input
+                  placeholder="Описание (необязательно)"
+                  value={groupForm.description}
+                  onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })}
+                  className="glass-input w-full px-4 py-3 text-sm"
+                />
+                <button
+                  onClick={handleCreateGroup}
+                  disabled={!groupForm.name}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                >
+                  <Plus size={16} /> Создать группу
+                </button>
+              </div>
+            )}
+
+            <p className="text-[10px] text-white/30 leading-relaxed">
+              Группы позволяют задать лимит трафика и срок действия по умолчанию для категории клиентов. При добавлении клиента в группу его политики обновляются автоматически. «Применить» распространяет текущие настройки группы на всех её клиентов.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Подтверждение удаления группы */}
+      <ConfirmDialog
+        open={!!confirmDeleteGroup}
+        title="Удалить группу"
+        message={`Удалить «${confirmDeleteGroup?.name}»? Клиенты останутся, но потеряют привязку к группе.`}
+        confirmLabel="Удалить"
+        cancelLabel="Отмена"
+        variant="danger"
+        onConfirm={() => {
+          if (confirmDeleteGroup) handleDeleteGroup(confirmDeleteGroup.id);
+          setConfirmDeleteGroup(null);
+        }}
+        onCancel={() => setConfirmDeleteGroup(null)}
+      />
     </div>
   );
 }

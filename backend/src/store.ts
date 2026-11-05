@@ -72,6 +72,16 @@ export interface ClientData {
   lastConnect: string;
   ip: string;
   subToken: string;
+  groupId?: number;
+}
+
+export interface GroupData {
+  id: number;
+  name: string;
+  color: string;
+  defaultTotalLimit: number;
+  defaultExpiryDays: number;
+  description: string;
 }
 
 interface TrafficPoint {
@@ -99,6 +109,7 @@ interface State {
   clients: ClientData[];
   traffic: TrafficPoint[];
   settings: Settings;
+  groups: GroupData[];
 }
 
 const DEFAULT_XRAY_VERSION = 'v25.10.15';
@@ -177,6 +188,7 @@ function loadState(): State {
       const parsed = JSON.parse(raw);
       if (!parsed.settings) parsed.settings = DEFAULT_SETTINGS;
       else parsed.settings = { ...DEFAULT_SETTINGS, ...parsed.settings };
+      if (!parsed.groups) parsed.groups = [];
       // Migrate legacy servers
       if (parsed.servers) {
         parsed.servers = parsed.servers.map(migrateServer);
@@ -191,6 +203,7 @@ function loadState(): State {
     clients: [],
     traffic: [],
     settings: { ...DEFAULT_SETTINGS },
+    groups: [],
   };
 }
 
@@ -215,6 +228,10 @@ export const store = {
 
   get settings(): Settings {
     return state.settings;
+  },
+
+  get groups(): GroupData[] {
+    return state.groups;
   },
 
   updateSettings(patch: Partial<Settings>): Settings {
@@ -594,12 +611,83 @@ export const store = {
     return changed;
   },
 
-  exportData(): { servers: ServerData[]; clients: ClientData[]; traffic: TrafficPoint[]; settings: Settings; exportedAt: string; version: string } {
+  // ── Группы ──────────────────────────────────────────────────────────
+
+  nextGroupId(): number {
+    return state.groups.length ? Math.max(...state.groups.map((g) => g.id)) + 1 : 1;
+  },
+
+  addGroup(data: { name: string; color: string; defaultTotalLimit: number; defaultExpiryDays: number; description: string }): GroupData {
+    const id = this.nextGroupId();
+    const group: GroupData = {
+      id,
+      name: data.name,
+      color: data.color || '#8B5CF6',
+      defaultTotalLimit: data.defaultTotalLimit || 0,
+      defaultExpiryDays: data.defaultExpiryDays || 30,
+      description: data.description || '',
+    };
+    state.groups.push(group);
+    save();
+    return group;
+  },
+
+  updateGroup(id: number, patch: Partial<GroupData>): GroupData | null {
+    const idx = state.groups.findIndex((g) => g.id === id);
+    if (idx === -1) return null;
+    state.groups[idx] = { ...state.groups[idx], ...patch, id };
+    save();
+    return state.groups[idx];
+  },
+
+  deleteGroup(id: number): void {
+    state.groups = state.groups.filter((g) => g.id !== id);
+    // Снимаем привязку к группе у клиентов
+    for (const c of state.clients) {
+      if (c.groupId === id) c.groupId = undefined;
+    }
+    save();
+  },
+
+  getGroup(id: number): GroupData | undefined {
+    return state.groups.find((g) => g.id === id);
+  },
+
+  assignClientToGroup(clientId: number, groupId: number | undefined): ClientData | null {
+    const idx = state.clients.findIndex((c) => c.id === clientId);
+    if (idx === -1) return null;
+    state.clients[idx].groupId = groupId;
+    save();
+    return state.clients[idx];
+  },
+
+  /** Применить политики группы к клиенту (лимит, срок). */
+  applyGroupPolicies(clientId: number): ClientData | null {
+    const client = state.clients.find((c) => c.id === clientId);
+    if (!client || !client.groupId) return null;
+    const group = state.groups.find((g) => g.id === client.groupId);
+    if (!group) return null;
+    state.clients.find((c) => c.id === clientId)!.totalLimit = group.defaultTotalLimit;
+    if (group.defaultExpiryDays > 0) {
+      state.clients.find((c) => c.id === clientId)!.expiryDate =
+        new Date(Date.now() + group.defaultExpiryDays * 86400000).toISOString().split('T')[0];
+    }
+    save();
+    return state.clients.find((c) => c.id === clientId)!;
+  },
+
+  /** Получить клиентов по группе. */
+  getClientsByGroup(groupId: number): ClientData[] {
+    return state.clients.filter((c) => c.groupId === groupId);
+  },
+
+  exportData(): { servers: ServerData[]; clients: ClientData[]; traffic: TrafficPoint[]; settings: Settings; groups: GroupData[]; exportedAt: string; version: string } {
     return {
       servers: JSON.parse(JSON.stringify(state.servers)),
       clients: JSON.parse(JSON.stringify(state.clients)),
       traffic: JSON.parse(JSON.stringify(state.traffic)),
       settings: { ...state.settings },
+      groups: JSON.parse(JSON.stringify(state.groups)),
       exportedAt: new Date().toISOString(),
       version: '1.0',
     };
@@ -609,6 +697,7 @@ export const store = {
     if (data.servers) state.servers = data.servers.map(migrateServer);
     if (data.clients) state.clients = data.clients;
     if (data.traffic) state.traffic = data.traffic;
+    if (data.groups) state.groups = data.groups;
     if (data.settings) state.settings = { ...DEFAULT_SETTINGS, ...state.settings, ...data.settings };
     save();
   },

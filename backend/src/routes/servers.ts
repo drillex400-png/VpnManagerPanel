@@ -1,19 +1,16 @@
 import { Router } from 'express';
 import { store } from '../store';
+import { enqueue } from '../queue';
 import {
   startServer,
   stopServer,
-  restartServer,
   isServerRunning,
-  verifyRunning,
-  queryStats,
-  getSystemStats,
   getServerLogs,
   clearServerLogs,
   getServerConfig,
   testConnection,
 } from '../xray/manager';
-import type { ServerData, ClientData } from '../store';
+import type { ServerData } from '../store';
 
 const router = Router();
 
@@ -104,42 +101,36 @@ router.delete('/servers/:id', async (req, res) => {
   res.json({ success: true });
 });
 
-router.post('/servers/:id/start', async (req, res) => {
+router.post('/servers/:id/start', (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
   if (!server) return res.status(404).json({ error: 'Сервер не найден' });
-  const clients = store.getClientsByServer(id);
-  const result = await startServer(server, clients);
-  if (result.ok) store.updateServer(id, { status: 'running', error: undefined });
-  else store.updateServer(id, { status: 'error', error: result.error });
-  res.json({ success: result.ok, error: result.error });
+  const op = enqueue('start', id, server.name);
+  res.json({ success: true, operationId: op.id, queued: true });
 });
 
-router.post('/servers/:id/stop', async (req, res) => {
-  const id = Number(req.params.id);
-  const server = store.getServer(id);
-  if (server) await stopServer(server);
-  store.updateServer(id, { status: 'stopped' });
-  res.json({ success: true });
-});
-
-router.post('/servers/:id/restart', async (req, res) => {
+router.post('/servers/:id/stop', (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
   if (!server) return res.status(404).json({ error: 'Сервер не найден' });
-  const clients = store.getClientsByServer(id);
-  const result = await restartServer(server, clients);
-  if (result.ok) store.updateServer(id, { status: 'running', error: undefined });
-  else store.updateServer(id, { status: 'error', error: result.error });
-  res.json({ success: result.ok, error: result.error });
+  const op = enqueue('stop', id, server.name);
+  res.json({ success: true, operationId: op.id, queued: true });
+});
+
+router.post('/servers/:id/restart', (req, res) => {
+  const id = Number(req.params.id);
+  const server = store.getServer(id);
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
+  const op = enqueue('restart', id, server.name);
+  res.json({ success: true, operationId: op.id, queued: true });
 });
 
 router.post('/servers/:id/regenerate-keys', (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
   if (!server) return res.status(404).json({ error: 'Сервер не найден' });
-  const updated = store.regenerateServerKeys(id);
-  res.json({ success: true, server: updated });
+  const op = enqueue('regenerate-keys', id, server.name);
+  res.json({ success: true, operationId: op.id, queued: true });
 });
 
 router.get('/servers/:id/logs', async (req, res) => {

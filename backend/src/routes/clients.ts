@@ -3,6 +3,7 @@ import { store } from '../store';
 import { isServerRunning, startServer } from '../xray/manager';
 import { generateShareUrl } from '../xray/share';
 import { notifyClientAdded } from '../telegram';
+import { logEvent } from '../events';
 import type { ClientData } from '../store';
 
 const router = Router();
@@ -59,6 +60,7 @@ router.post('/clients', async (req, res) => {
   if (store.settings.telegramNotifications) {
     notifyClientAdded(client).catch(() => {});
   }
+  logEvent({ type: 'client', severity: 'success', title: 'Клиент добавлен', message: `${client.name} (${client.email}) на ${client.serverName}`, clientId: client.id, clientName: client.name });
   res.status(201).json(clientWithUrls(client));
 });
 
@@ -88,6 +90,7 @@ router.delete('/clients/:id', async (req, res) => {
       startServer(server, clients);
     }
   }
+  if (client) logEvent({ type: 'client', severity: 'info', title: 'Клиент удалён', message: `${client.name} (${client.email})`, clientId: id, clientName: client.name });
   res.json({ success: true });
 });
 
@@ -168,6 +171,75 @@ router.get('/clients/export', (_req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="clients-${new Date().toISOString().slice(0, 10)}.csv"`);
   // BOM для корректного отображения кириллицы в Excel
   res.send('\ufeff' + csv);
+});
+
+// ── Групповые политики ────────────────────────────────────────────────
+
+router.get('/groups', (_req, res) => {
+  const groups = store.groups.map((g) => ({
+    ...g,
+    clientCount: store.getClientsByGroup(g.id).length,
+  }));
+  res.json(groups);
+});
+
+router.post('/groups', (req, res) => {
+  const { name, color, defaultTotalLimit, defaultExpiryDays, description } = req.body;
+  if (!name) return res.status(400).json({ error: 'Укажите название группы' });
+  const group = store.addGroup({ name, color, defaultTotalLimit, defaultExpiryDays, description });
+  logEvent({ type: 'client', severity: 'success', title: 'Группа создана', message: name });
+  res.status(201).json(group);
+});
+
+router.put('/groups/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const updated = store.updateGroup(id, req.body);
+  if (!updated) return res.status(404).json({ error: 'Группа не найдена' });
+  res.json(updated);
+});
+
+router.delete('/groups/:id', (req, res) => {
+  const id = Number(req.params.id);
+  store.deleteGroup(id);
+  res.json({ success: true });
+});
+
+// Привязать клиента к группе
+router.post('/clients/:id/assign-group', async (req, res) => {
+  const id = Number(req.params.id);
+  const { groupId } = req.body;
+  const client = store.assignClientToGroup(id, groupId || undefined);
+  if (!client) return res.status(404).json({ error: 'Клиент не найден' });
+  // Применяем политики группы
+  if (groupId) {
+    store.applyGroupPolicies(id);
+    // Перезапускаем сервер если нужно
+    const server = store.getServer(client.serverId);
+    if (server && isServerRunning(client.serverId)) {
+      const clients = store.getClientsByServer(client.serverId);
+      startServer(server, clients);
+    }
+  }
+  res.json(clientWithUrls(store.clients.find((c) => c.id === id)!));
+});
+
+// Применить политики группы ко всем клиентам в ней
+router.post('/groups/:id/apply', async (req, res) => {
+  const id = Number(req.params.id);
+  const groupClients = store.getClientsByGroup(id);
+  const affectedServers = new Set<number>();
+  for (const c of groupClients) {
+    store.applyGroupPolicies(c.id);
+    affectedServers.add(c.serverId);
+  }
+  for (const serverId of affectedServers) {
+    const server = store.getServer(serverId);
+    if (server && isServerRunning(serverId)) {
+      const clients = store.getClientsByServer(serverId);
+      startServer(server, clients);
+    }
+  }
+  res.json({ success: true, count: groupClients.length });
 });
 
 export default router;

@@ -1,4 +1,4 @@
-import type { DashboardData, Server, Client, TrafficData, Notification, PingData, XrayVersions, Settings, ServerLogs, ServerConfig, Inbound, BulkResult } from './types';
+import type { DashboardData, Server, Client, TrafficData, Notification, PingData, XrayVersions, Settings, ServerLogs, ServerConfig, Inbound, BulkResult, Group, EventEntry, MetricPoint, DiagnosticsData, QueueOperation } from './types';
 
 const BASE = '/api';
 
@@ -84,5 +84,22 @@ export const api = {
   backup: {
     export: () => req<{ servers: any[]; clients: any[]; traffic: any[]; settings: Settings; exportedAt: string }>('/backup'),
     restore: (data: any) => req<{ success: boolean; servers: number; clients: number }>('/restore', { method: 'POST', body: JSON.stringify(data) }),
+  },
+  groups: {
+    list: () => req<Group[]>('/groups'),
+    create: (data: Partial<Group>) => req<Group>('/groups', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<Group>) => req<Group>(`/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: number) => req<{ success: boolean }>(`/groups/${id}`, { method: 'DELETE' }),
+    apply: (id: number) => req<{ success: boolean; count: number }>(`/groups/${id}/apply`, { method: 'POST' }),
+  },
+  assignGroup: (clientId: number, groupId: number | undefined) =>
+    req<Client>(`/clients/${clientId}/assign-group`, { method: 'POST', body: JSON.stringify({ groupId }) }),
+  monitor: {
+    events: (filter?: string) => req<EventEntry[]>(`/events${filter ? `?filter=${filter}` : ''}`),
+    clearEvents: () => req<{ success: boolean }>('/events', { method: 'DELETE' }),
+    metrics: (serverId: number) => req<MetricPoint[]>(`/metrics/${serverId}`),
+    allMetrics: () => req<Record<number, MetricPoint[]>>('/metrics'),
+    diagnostics: (serverId: number) => req<DiagnosticsData>(`/diagnostics/${serverId}`),
+    queue: () => req<QueueOperation[]>('/queue'),
   },
 };

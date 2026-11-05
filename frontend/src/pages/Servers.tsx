@@ -25,7 +25,7 @@ const emptyAddForm = {
 };
 
 export default function Servers() {
-  const { success: toastSuccess, error: toastError } = useToast();
+  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -109,22 +109,23 @@ export default function Servers() {
   const handleStart = async (id: number) => {
     setStarting(id);
     try {
-      const res = await api.servers.start(id);
-      if (res.success) {
-        toastSuccess('Xray запущен на ноде');
-      } else if (res.error) {
-        toastError(`Не удалось запустить: ${res.error}`);
-      }
+      await api.servers.start(id);
+      toastSuccess('Операция в очереди: запуск ноды');
     } catch (e) {
       toastError(`Ошибка: ${(e as Error).message}`);
     }
     setStarting(null);
-    load();
+    setTimeout(load, 2000);
   };
 
   const handleStop = async (id: number) => {
-    await api.servers.stop(id);
-    load();
+    try {
+      await api.servers.stop(id);
+      toastInfo('Операция в очереди: остановка ноды');
+    } catch (e) {
+      toastError(`Ошибка: ${(e as Error).message}`);
+    }
+    setTimeout(load, 2000);
   };
 
   const handleDownloadVersion = async (version: string) => {
@@ -143,14 +144,13 @@ export default function Servers() {
   const handleRestart = async (id: number) => {
     setRestarting(id);
     try {
-      const res = await api.servers.restart(id);
-      if (res.success) toastSuccess('Нода перезапущена');
-      else if (res.error) toastError(`Ошибка перезапуска: ${res.error}`);
+      await api.servers.restart(id);
+      toastInfo('Операция в очереди: перезапуск ноды');
     } catch (e) {
       toastError(`Ошибка: ${(e as Error).message}`);
     }
     setRestarting(null);
-    load();
+    setTimeout(load, 2000);
   };
 
   const handleEdit = (s: Server) => {

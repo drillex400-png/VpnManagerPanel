@@ -78,6 +78,7 @@ export interface Client {
   vlessUrl: string;
   subUrl?: string;
   shareUrls?: ShareUrl[];
+  groupId?: number;
 }
 
 export interface ServerListItem {
@@ -154,6 +155,69 @@ export interface BulkResult {
   success: boolean;
   count: number;
   action: string;
+}
+
+// ── Группы ────────────────────────────────────────────────────────────
+
+export interface Group {
+  id: number;
+  name: string;
+  color: string;
+  defaultTotalLimit: number;
+  defaultExpiryDays: number;
+  description: string;
+  clientCount?: number;
+}
+
+// ── Мониторинг ────────────────────────────────────────────────────────
+
+export interface EventEntry {
+  id: number;
+  type: 'server' | 'client' | 'queue' | 'system' | 'security';
+  severity: 'info' | 'warning' | 'error' | 'success';
+  title: string;
+  message: string;
+  serverId?: number;
+  serverName?: string;
+  clientId?: number;
+  clientName?: string;
+  timestamp: string;
+}
+
+export interface MetricPoint {
+  time: string;
+  cpu: number;
+  ram: number;
+  disk: number;
+  uptime: number;
+  uploadSpeed: number;
+  downloadSpeed: number;
+}
+
+export interface DiagnosticsData {
+  serverId: number;
+  serverName: string;
+  running: boolean;
+  ping: number;
+  sshOk: boolean;
+  sshError: string;
+  xrayProcess: boolean;
+  systemStats: { cpu: number; ram: number; disk: number; uptime: number } | null;
+}
+
+export type OpType = 'start' | 'stop' | 'restart' | 'regenerate-keys';
+export type OpStatus = 'pending' | 'running' | 'done' | 'failed';
+
+export interface QueueOperation {
+  id: number;
+  type: OpType;
+  serverId: number;
+  serverName: string;
+  status: OpStatus;
+  result?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface ServerLogs {

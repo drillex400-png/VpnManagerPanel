@@ -1,13 +1,15 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Server, Users, Activity, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Server, Users, Activity, Settings, LogOut, MonitorCog } from 'lucide-react';
 import { api } from '../api';
 import { useEffect, useState } from 'react';
 import NotificationsPanel from './NotificationsPanel';
+import QueuePanel from './QueuePanel';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Главная' },
   { to: '/servers', icon: Server, label: 'Ноды' },
   { to: '/clients', icon: Users, label: 'Клиенты' },
+  { to: '/monitor', icon: MonitorCog, label: 'Монитор' },
   { to: '/traffic', icon: Activity, label: 'Трафик' },
   { to: '/settings', icon: Settings, label: 'Настройки' },
 ];
@@ -38,6 +40,7 @@ export default function Layout() {
           <span className="text-sm font-bold font-display tracking-tight">Xray Панель</span>
         </div>
         <div className="flex items-center gap-2">
+          <QueuePanel />
           <NotificationsPanel />
           <button
             onClick={() => setShowLogout(true)}
@@ -69,7 +72,7 @@ export default function Layout() {
               to={to}
               end={to === '/'}
               className={({ isActive }) =>
-                `relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-200 ${
+                `relative flex flex-col items-center gap-0.5 px-2.5 py-2 rounded-2xl transition-all duration-200 ${
                   isActive ? 'text-violet-300' : 'text-white/40'
                 }`
               }
