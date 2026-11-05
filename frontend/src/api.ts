@@ -1,4 +1,4 @@
-import type { DashboardData, Server, Client, TrafficData, Notification, PingData, XrayVersions, Settings, ServerLogs, ServerConfig } from './types';
+import type { DashboardData, Server, Client, TrafficData, Notification, PingData, XrayVersions, Settings, ServerLogs, ServerConfig, Inbound } from './types';
 
 const BASE = '/api';
 
@@ -28,6 +28,12 @@ export const api = {
     logs: (id: number) => req<ServerLogs>(`/servers/${id}/logs`),
     clearLogs: (id: number) => req<{ success: boolean }>(`/servers/${id}/logs`, { method: 'DELETE' }),
     config: (id: number) => req<ServerConfig>(`/servers/${id}/config`),
+    // Inbound CRUD
+    listInbounds: (id: number) => req<Inbound[]>(`/servers/${id}/inbounds`),
+    addInbound: (id: number, data: Partial<Inbound>) => req<Inbound>(`/servers/${id}/inbounds`, { method: 'POST', body: JSON.stringify(data) }),
+    updateInbound: (id: number, inboundId: number, data: Partial<Inbound>) => req<Inbound>(`/servers/${id}/inbounds/${inboundId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteInbound: (id: number, inboundId: number) => req<{ success: boolean }>(`/servers/${id}/inbounds/${inboundId}`, { method: 'DELETE' }),
+    regenerateInboundKeys: (id: number, inboundId: number) => req<{ success: boolean; server: Server }>(`/servers/${id}/inbounds/${inboundId}/regenerate-keys`, { method: 'POST' }),
   },
   clients: {
     list: () => req<Client[]>('/clients'),

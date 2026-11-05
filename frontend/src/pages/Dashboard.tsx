@@ -65,7 +65,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[1.7rem] font-bold font-display">Xray Panel</h1>
-          <p className="text-sm text-white/40">VLESS + Reality Control Center</p>
+          <p className="text-sm text-white/40">Multi-Protocol Control Center</p>
         </div>
         <div className="flex items-center gap-3">
           <NotificationsPanel />

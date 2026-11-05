@@ -120,15 +120,14 @@ export default function SettingsPage() {
       <div className="glass-card p-5 space-y-2">
         <SectionTitle icon={Shield} title="Protocol Info" />
         <div className="space-y-1.5">
-          <Row label="Protocol" value="VLESS + Reality" />
-          <Row label="Flow" value="xtls-rprx-vision" />
-          <Row label="Transport" value="TCP" />
-          <Row label="Encryption" value="X25519 / Reality" />
+          <Row label="Protocols" value="VLESS · VMess · Trojan · SS · SOCKS · HTTP" />
+          <Row label="Transports" value="TCP · mKCP · WS · HTTP/2 · gRPC · QUIC" />
+          <Row label="Security" value="None · TLS · Reality" />
           <Row label="Core" value="Xray-core" />
         </div>
         <p className="text-[10px] text-white/30 leading-relaxed pt-1 flex items-start gap-1.5">
           <Zap size={10} className="text-violet-400 mt-0.5 flex-shrink-0" />
-          Protocol settings (SNI, keys, short IDs) are configured per-server in the Protocol Editor.
+          Protocol settings (SNI, keys, short IDs, ciphers) are configured per-inbound in the Inbound Editor.
         </p>
       </div>
 

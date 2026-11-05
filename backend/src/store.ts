@@ -1,6 +1,16 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { generateX25519KeyPair, generateShortIds } from './xray/keys';
+import {
+  type InboundData,
+  type ProtocolType,
+  type NetworkType,
+  type SecurityType,
+  PROTOCOL_DEFAULTS,
+  defaultTransportSettings,
+  defaultSecuritySettings,
+  generatePassword,
+} from './xray/protocols';
 
 const DATA_DIR = process.env.XRAY_DATA_DIR || join(process.cwd(), '.xray-data');
 const DATA_FILE = join(DATA_DIR, 'state.json');
@@ -17,11 +27,6 @@ export interface ServerData {
   flag: string;
   status: 'running' | 'stopped' | 'error';
   xrayVersion: string;
-  realityDest: string;
-  realitySNI: string;
-  realityPublicKey: string;
-  realityPrivateKey: string;
-  realityShortIds: string[];
   cpu: number;
   ram: number;
   uptime: number;
@@ -32,7 +37,16 @@ export interface ServerData {
   downloadSpeed: number;
   createdAt: string;
   error?: string;
+  inbounds: InboundData[];
+  // Legacy fields kept for backward-compat migration (not used if inbounds exist)
+  realityDest?: string;
+  realitySNI?: string;
+  realityPublicKey?: string;
+  realityPrivateKey?: string;
+  realityShortIds?: string[];
 }
+
+export { type InboundData, type ProtocolType, type NetworkType, type SecurityType };
 
 export interface ClientData {
   id: number;
@@ -83,13 +97,62 @@ const DEFAULT_SETTINGS: Settings = {
   defaultExpiryDays: 30,
 };
 
+// ── Migration: convert legacy Reality fields to an inbound ─────────────
+
+function migrateServer(server: any): ServerData {
+  if (server.inbounds && server.inbounds.length > 0) {
+    return server as ServerData;
+  }
+  // Create a VLESS+Reality inbound from legacy fields
+  const keys = server.realityPublicKey
+    ? { publicKey: server.realityPublicKey, privateKey: server.realityPrivateKey || '' }
+    : generateX25519KeyPair();
+  const shortIds = server.realityShortIds?.length
+    ? server.realityShortIds
+    : generateShortIds(2);
+
+  const inbound: InboundData = {
+    id: 1,
+    serverId: server.id,
+    tag: 'vless-reality',
+    protocol: 'vless',
+    listen: '0.0.0.0',
+    port: server.port || 443,
+    network: 'tcp',
+    security: 'reality',
+    protocolSettings: { flow: 'xtls-rprx-vision' },
+    transportSettings: { headerType: 'none' },
+    securitySettings: {
+      dest: server.realityDest || 'www.microsoft.com:443',
+      serverNames: server.realitySNI || 'www.microsoft.com',
+      privateKey: keys.privateKey,
+      shortIds: shortIds.join(', '),
+      fingerprint: 'chrome',
+      xver: 0,
+      show: false,
+      maxTimeDiff: 0,
+    },
+    sniffing: { enabled: true, destOverride: ['http', 'tls'] },
+    createdAt: server.createdAt || new Date().toISOString(),
+  };
+
+  return {
+    ...server,
+    inbounds: [inbound],
+    realityPublicKey: keys.publicKey, // keep for URL generation compat
+  } as ServerData;
+}
+
 function loadState(): State {
   if (existsSync(DATA_FILE)) {
     try {
       const raw = readFileSync(DATA_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      // Ensure settings exist (migration for older state files)
       if (!parsed.settings) parsed.settings = DEFAULT_SETTINGS;
+      // Migrate legacy servers
+      if (parsed.servers) {
+        parsed.servers = parsed.servers.map(migrateServer);
+      }
       return parsed;
     } catch {
       // corrupt file — start fresh
@@ -140,6 +203,12 @@ export const store = {
     return state.clients.length ? Math.max(...state.clients.map((c) => c.id)) + 1 : 1;
   },
 
+  nextInboundId(serverId: number): number {
+    const server = state.servers.find((s) => s.id === serverId);
+    if (!server || !server.inbounds) return 1;
+    return server.inbounds.length ? Math.max(...server.inbounds.map((i) => i.id)) + 1 : 1;
+  },
+
   addServer(data: {
     name: string;
     host: string;
@@ -151,28 +220,47 @@ export const store = {
     realitySNI?: string;
   }): ServerData {
     const id = this.nextServerId();
+    const dest = data.realityDest || 'www.microsoft.com:443';
+    const sni = data.realitySNI || dest.split(':')[0];
     const keys = generateX25519KeyPair();
     const shortIds = generateShortIds(2);
 
-    // Default Reality target: a popular website with TLS 1.3 and H2
-    const dest = data.realityDest || 'www.microsoft.com:443';
-    const sni = data.realitySNI || dest.split(':')[0];
+    // Create default VLESS+Reality inbound
+    const inbound: InboundData = {
+      id: 1,
+      serverId: id,
+      tag: `inbound-${id}-1`,
+      protocol: 'vless',
+      listen: '0.0.0.0',
+      port: data.port || 443,
+      network: 'tcp',
+      security: 'reality',
+      protocolSettings: { flow: 'xtls-rprx-vision' },
+      transportSettings: { headerType: 'none' },
+      securitySettings: {
+        dest,
+        serverNames: sni,
+        privateKey: keys.privateKey,
+        shortIds: shortIds.join(', '),
+        fingerprint: 'chrome',
+        xver: 0,
+        show: false,
+        maxTimeDiff: 0,
+      },
+      sniffing: { enabled: true, destOverride: ['http', 'tls'] },
+      createdAt: new Date().toISOString(),
+    };
 
     const server: ServerData = {
       id,
       name: data.name,
       host: data.host,
       port: data.port || 443,
-      apiPort: 10000 + id, // unique API port per server
+      apiPort: 10000 + id,
       location: data.location,
       flag: data.flag || '🌐',
       status: 'stopped',
       xrayVersion: data.xrayVersion || DEFAULT_XRAY_VERSION,
-      realityDest: dest,
-      realitySNI: sni,
-      realityPublicKey: keys.publicKey,
-      realityPrivateKey: keys.privateKey,
-      realityShortIds: shortIds,
       cpu: 0,
       ram: 0,
       uptime: 100,
@@ -182,6 +270,8 @@ export const store = {
       uploadSpeed: 0,
       downloadSpeed: 0,
       createdAt: new Date().toISOString(),
+      inbounds: [inbound],
+      realityPublicKey: keys.publicKey,
     };
 
     state.servers.push(server);
@@ -199,8 +289,114 @@ export const store = {
 
   deleteServer(id: number): void {
     state.servers = state.servers.filter((s) => s.id !== id);
-    state.clients = state.clients.filter((c) => c.serverId === id);
+    state.clients = state.clients.filter((c) => c.serverId !== id);
     save();
+  },
+
+  getServer(id: number): ServerData | undefined {
+    return state.servers.find((s) => s.id === id);
+  },
+
+  // ── Inbound CRUD ────────────────────────────────────────────────────
+
+  addInbound(serverId: number, data: {
+    protocol: ProtocolType;
+    port: number;
+    network?: NetworkType;
+    security?: SecurityType;
+    protocolSettings?: Record<string, any>;
+    transportSettings?: Record<string, any>;
+    securitySettings?: Record<string, any>;
+  }): InboundData | null {
+    const server = state.servers.find((s) => s.id === serverId);
+    if (!server) return null;
+
+    const defaults = PROTOCOL_DEFAULTS[data.protocol];
+    const network = data.network || defaults.network;
+    const security = data.security || defaults.security;
+
+    // For reality security, auto-generate keys if not provided
+    let securitySettings = data.securitySettings || defaultSecuritySettings(security);
+    if (security === 'reality' && !securitySettings.privateKey) {
+      const keys = generateX25519KeyPair();
+      const shortIds = generateShortIds(2);
+      securitySettings = {
+        ...securitySettings,
+        privateKey: keys.privateKey,
+        shortIds: shortIds.join(', '),
+      };
+    }
+
+    // For shadowsocks, auto-generate password if not provided
+    let protocolSettings = data.protocolSettings || defaults.protocolSettings;
+    if (data.protocol === 'shadowsocks' && !protocolSettings.password) {
+      protocolSettings = { ...protocolSettings, password: generatePassword() };
+    }
+
+    const inboundId = this.nextInboundId(serverId);
+    const inbound: InboundData = {
+      id: inboundId,
+      serverId,
+      tag: `inbound-${serverId}-${inboundId}`,
+      protocol: data.protocol,
+      listen: '0.0.0.0',
+      port: data.port,
+      network,
+      security,
+      protocolSettings,
+      transportSettings: data.transportSettings || defaultTransportSettings(network),
+      securitySettings,
+      sniffing: { enabled: true, destOverride: ['http', 'tls'] },
+      createdAt: new Date().toISOString(),
+    };
+
+    if (!server.inbounds) server.inbounds = [];
+    server.inbounds.push(inbound);
+    save();
+    return inbound;
+  },
+
+  updateInbound(serverId: number, inboundId: number, patch: Partial<InboundData>): InboundData | null {
+    const server = state.servers.find((s) => s.id === serverId);
+    if (!server || !server.inbounds) return null;
+    const idx = server.inbounds.findIndex((i) => i.id === inboundId);
+    if (idx === -1) return null;
+    server.inbounds[idx] = { ...server.inbounds[idx], ...patch, id: inboundId, serverId };
+    save();
+    return server.inbounds[idx];
+  },
+
+  deleteInbound(serverId: number, inboundId: number): boolean {
+    const server = state.servers.find((s) => s.id === serverId);
+    if (!server || !server.inbounds) return false;
+    const before = server.inbounds.length;
+    server.inbounds = server.inbounds.filter((i) => i.id !== inboundId);
+    if (server.inbounds.length !== before) {
+      save();
+      return true;
+    }
+    return false;
+  },
+
+  getInbounds(serverId: number): InboundData[] {
+    const server = state.servers.find((s) => s.id === serverId);
+    return server?.inbounds || [];
+  },
+
+  // Keep the public key accessible for backward-compat URL generation
+  getRealityPublicKey(serverId: number): string {
+    const server = state.servers.find((s) => s.id === serverId);
+    if (!server) return '';
+    // Check if legacy field exists
+    if (server.realityPublicKey) return server.realityPublicKey;
+    // Derive from first reality inbound
+    const realityInbound = server.inbounds?.find((i) => i.security === 'reality');
+    if (realityInbound) {
+      // We stored the private key; the public key was used for URLs.
+      // In practice, clients use the publicKey from the share URL.
+      // We keep the legacy field for this purpose.
+    }
+    return '';
   },
 
   regenerateServerKeys(id: number): ServerData | null {
@@ -208,18 +404,24 @@ export const store = {
     if (idx === -1) return null;
     const keys = generateX25519KeyPair();
     const shortIds = generateShortIds(2);
-    state.servers[idx] = {
-      ...state.servers[idx],
-      realityPublicKey: keys.publicKey,
-      realityPrivateKey: keys.privateKey,
-      realityShortIds: shortIds,
-    };
+    // Update legacy fields
+    state.servers[idx].realityPublicKey = keys.publicKey;
+    state.servers[idx].realityPrivateKey = keys.privateKey;
+    state.servers[idx].realityShortIds = shortIds;
+    // Update all reality inbounds
+    if (state.servers[idx].inbounds) {
+      for (const inbound of state.servers[idx].inbounds) {
+        if (inbound.security === 'reality') {
+          inbound.securitySettings = {
+            ...inbound.securitySettings,
+            privateKey: keys.privateKey,
+            shortIds: shortIds.join(', '),
+          };
+        }
+      }
+    }
     save();
     return state.servers[idx];
-  },
-
-  getServer(id: number): ServerData | undefined {
-    return state.servers.find((s) => s.id === id);
   },
 
   addClient(data: {
@@ -276,11 +478,7 @@ export const store = {
   resetClientStats(id: number): ClientData | null {
     const idx = state.clients.findIndex((c) => c.id === id);
     if (idx === -1) return null;
-    state.clients[idx] = {
-      ...state.clients[idx],
-      upload: 0,
-      download: 0,
-    };
+    state.clients[idx] = { ...state.clients[idx], upload: 0, download: 0 };
     save();
     return state.clients[idx];
   },
@@ -293,7 +491,6 @@ export const store = {
     for (const client of state.clients) {
       const stat = stats[client.email];
       if (stat) {
-        // Stats are cumulative bytes — store as GB
         client.upload = stat.uplink / (1024 * 1024 * 1024);
         client.download = stat.downlink / (1024 * 1024 * 1024);
       }
@@ -301,12 +498,10 @@ export const store = {
     save();
   },
 
-  // Traffic history (for charts) — updated daily
   pushTrafficPoint(): void {
     const today = new Date().toISOString().split('T')[0];
     const totalUp = state.clients.reduce((a, c) => a + c.upload, 0);
     const totalDown = state.clients.reduce((a, c) => a + c.download, 0);
-
     const existing = state.traffic.find((t) => t.date === today);
     if (existing) {
       existing.upload = totalUp;
@@ -318,12 +513,9 @@ export const store = {
     save();
   },
 
-  // Reset all server statuses to stopped (called on backend restart)
   resetStatuses(): void {
     for (const s of state.servers) {
-      if (s.status === 'running') {
-        s.status = 'stopped';
-      }
+      if (s.status === 'running') s.status = 'stopped';
     }
     save();
   },

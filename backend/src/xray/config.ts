@@ -1,14 +1,50 @@
-import type { ServerData, ClientData } from '../store';
+import { buildInboundXray, type InboundData, type ClientData } from './protocols';
+import type { ServerData } from '../store';
 
 /**
- * Generate a real Xray-core JSON config for VLESS+Reality.
- * Includes the API inbound for stats, the VLESS+Reality inbound for clients,
- * and routing rules.
+ * Generate a real Xray-core JSON config from a server's inbounds.
+ * Supports all protocols (VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, Dokodemo-door),
+ * all transports (TCP, mKCP, WebSocket, HTTP/2, gRPC, QUIC), and all security types
+ * (none, TLS, Reality).
  */
 export function generateXrayConfig(server: ServerData, clients: ClientData[]): object {
-  const activeClients = clients.filter(
-    (c) => c.serverId === server.id && c.status === 'active',
+  const inbounds = server.inbounds || [];
+
+  const userInbounds = inbounds.map((inbound: InboundData) =>
+    buildInboundXray(inbound, clients),
   );
+
+  // Always include the API inbound for stats
+  const apiInbound = {
+    tag: 'api',
+    listen: '127.0.0.1',
+    port: server.apiPort,
+    protocol: 'dokodemo-door',
+    settings: {
+      address: '127.0.0.1',
+    },
+  };
+
+  // Collect all inbound tags for routing
+  const inboundTags = inbounds.map((i) => i.tag);
+
+  const routingRules: any[] = [
+    {
+      type: 'field',
+      inboundTag: ['api'],
+      outboundTag: 'api',
+    },
+  ];
+
+  // Block bittorrent for all user inbounds
+  if (inboundTags.length > 0) {
+    routingRules.push({
+      type: 'field',
+      inboundTag: [...inboundTags],
+      protocol: ['bittorrent'],
+      outboundTag: 'block',
+    });
+  }
 
   return {
     log: {
@@ -27,47 +63,7 @@ export function generateXrayConfig(server: ServerData, clients: ClientData[]): o
         },
       },
     },
-    inbounds: [
-      {
-        tag: 'api',
-        listen: '127.0.0.1',
-        port: server.apiPort,
-        protocol: 'dokodemo-door',
-        settings: {
-          address: '127.0.0.1',
-        },
-      },
-      {
-        tag: 'vless-reality',
-        listen: '0.0.0.0',
-        port: server.port,
-        protocol: 'vless',
-        settings: {
-          clients: activeClients.map((c) => ({
-            id: c.uuid,
-            flow: c.flow,
-            email: c.email,
-          })),
-          decryption: 'none',
-        },
-        streamSettings: {
-          network: 'tcp',
-          security: 'reality',
-          realitySettings: {
-            show: false,
-            dest: server.realityDest,
-            xver: 0,
-            serverNames: [server.realitySNI],
-            privateKey: server.realityPrivateKey,
-            shortIds: server.realityShortIds,
-          },
-        },
-        sniffing: {
-          enabled: true,
-          destOverride: ['http', 'tls'],
-        },
-      },
-    ],
+    inbounds: [apiInbound, ...userInbounds],
     outbounds: [
       {
         tag: 'direct',
@@ -79,18 +75,7 @@ export function generateXrayConfig(server: ServerData, clients: ClientData[]): o
       },
     ],
     routing: {
-      rules: [
-        {
-          type: 'field',
-          inboundTag: ['api'],
-          outboundTag: 'api',
-        },
-        {
-          type: 'field',
-          protocol: ['bittorrent'],
-          outboundTag: 'block',
-        },
-      ],
+      rules: routingRules,
     },
   };
 }

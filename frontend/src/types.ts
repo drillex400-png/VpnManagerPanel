@@ -1,14 +1,21 @@
+import type { ProtocolType, NetworkType, SecurityType } from './protocols';
+
 export type ServerStatus = 'running' | 'stopped' | 'error';
 
-export interface Protocol {
+export interface Inbound {
   id: number;
   serverId: number;
-  type: 'vless';
+  tag: string;
+  protocol: ProtocolType;
+  listen: string;
   port: number;
-  status: 'running' | 'stopped';
-  clients: number;
-  upload: number;
-  download: number;
+  network: NetworkType;
+  security: SecurityType;
+  protocolSettings: Record<string, any>;
+  transportSettings: Record<string, any>;
+  securitySettings: Record<string, any>;
+  sniffing: { enabled: boolean; destOverride: string[] };
+  createdAt: string;
 }
 
 export interface Server {
@@ -21,11 +28,6 @@ export interface Server {
   flag: string;
   status: ServerStatus;
   xrayVersion: string;
-  realityDest: string;
-  realitySNI: string;
-  realityPublicKey: string;
-  realityPrivateKey: string;
-  realityShortIds: string[];
   cpu: number;
   ram: number;
   uptime: number;
@@ -36,10 +38,19 @@ export interface Server {
   downloadSpeed: number;
   createdAt: string;
   error?: string;
-  protocols?: Protocol[];
+  inbounds: Inbound[];
+  realityPublicKey?: string;
+  // Legacy fields
+  realityDest?: string;
+  realitySNI?: string;
 }
 
 export type ClientStatus = 'active' | 'disabled' | 'expired' | 'limited';
+
+export interface ShareUrl {
+  protocol: string;
+  url: string;
+}
 
 export interface Client {
   id: number;
@@ -58,6 +69,7 @@ export interface Client {
   lastConnect: string;
   ip: string;
   vlessUrl: string;
+  shareUrls?: ShareUrl[];
 }
 
 export interface ServerListItem {
@@ -132,6 +144,4 @@ export interface ServerConfig {
   filename: string;
 }
 
-export const PROTOCOL_META: Record<string, { name: string; color: string }> = {
-  vless: { name: 'VLESS + Reality', color: '#8B5CF6' },
-};
+export { type ProtocolType, type NetworkType, type SecurityType };

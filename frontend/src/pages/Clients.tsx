@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Search, Copy, X, Clock, Trash2, Wifi, QrCode, Check, Pencil, RotateCcw } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api';
-import { PROTOCOL_META } from '../types';
+import { PROTOCOL_META } from '../protocols';
 import type { Client, ClientStatus, Server } from '../types';
 
 const filterTabs: { key: ClientStatus | 'all'; label: string }[] = [
@@ -147,7 +147,7 @@ export default function Clients() {
             <Plus size={28} className="text-violet-400" />
           </div>
           <p className="text-sm text-white/60 mb-1">{servers.length === 0 ? 'Add a server first' : 'No clients yet'}</p>
-          <p className="text-xs text-white/30">{servers.length === 0 ? 'You need a server before adding clients' : 'Add your first VLESS+Reality client'}</p>
+          <p className="text-xs text-white/30">{servers.length === 0 ? 'You need a server before adding clients' : 'Add your first client'}</p>
         </div>
       )}
 
@@ -177,13 +177,19 @@ export default function Clients() {
             </div>
 
             {/* Server + protocol */}
-            <div className="flex items-center gap-2 mb-3">
-              <span
-                className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                style={{ background: PROTOCOL_META.vless.color + '15', color: PROTOCOL_META.vless.color }}
-              >
-                VLESS + Reality
-              </span>
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              {(c.shareUrls || [{ protocol: 'vless', url: c.vlessUrl }]).map((su, idx) => {
+                const meta = PROTOCOL_META[su.protocol] || { name: su.protocol, color: '#888' };
+                return (
+                  <span
+                    key={idx}
+                    className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                    style={{ background: meta.color + '15', color: meta.color }}
+                  >
+                    {meta.name}
+                  </span>
+                );
+              })}
               <span className="text-xs text-white/40">on {c.serverName}</span>
               {server && (
                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${server.status === 'running' ? 'text-emerald-400 bg-emerald-500/10' : 'text-white/30 bg-white/5'}`}>
@@ -315,8 +321,15 @@ export default function Clients() {
                 </option>
               ))}
             </select>
-            <div className="bg-white/[0.02] rounded-2xl p-3 text-xs text-white/40">
-              Protocol: VLESS + Reality • Flow: xtls-rprx-vision
+            <div className="flex flex-wrap gap-1.5 bg-white/[0.02] rounded-2xl p-3">
+              {(servers.find(sv => sv.id === addForm.serverId)?.inbounds || []).map((ib) => {
+                const meta = PROTOCOL_META[ib.protocol] || { name: ib.protocol, color: '#888' };
+                return (
+                  <span key={ib.id} className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: meta.color + '15', color: meta.color }}>
+                    {meta.name} · {ib.security}
+                  </span>
+                );
+              })}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <input
@@ -355,7 +368,7 @@ export default function Clients() {
                 <X size={20} />
               </button>
             </div>
-            <p className="text-xs text-white/40 mb-4">VLESS + Reality • {qrClient.serverName}</p>
+            <p className="text-xs text-white/40 mb-4">{qrClient.serverName}</p>
             <div className="bg-white p-4 rounded-2xl inline-block">
               <QRCodeSVG value={qrClient.vlessUrl} size={180} level="M" />
             </div>
@@ -364,8 +377,29 @@ export default function Clients() {
               onClick={() => copyUrl(qrClient.vlessUrl, qrClient.id)}
               className="w-full mt-4 py-3 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
-              {copied === qrClient.id ? <Check size={14} /> : <Copy size={14} />} Copy VLESS URL
+              {copied === qrClient.id ? <Check size={14} /> : <Copy size={14} />} Copy URL
             </button>
+            {(qrClient.shareUrls || []).length > 1 && (
+              <div className="mt-4 space-y-1.5">
+                <p className="text-[10px] text-white/30 mb-1">All protocol URLs:</p>
+                {qrClient.shareUrls!.filter((su) => su.url && su.url !== qrClient.vlessUrl).map((su, idx) => {
+                  const meta = PROTOCOL_META[su.protocol] || { name: su.protocol, color: '#888' };
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => copyUrl(su.url, qrClient.id + idx * 1000)}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl glass-soft text-left active:scale-95 transition-transform"
+                    >
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: meta.color + '15', color: meta.color }}>
+                        {meta.name}
+                      </span>
+                      <span className="text-[10px] text-white/40 truncate flex-1 font-mono">{su.url.slice(0, 40)}...</span>
+                      {copied === qrClient.id + idx * 1000 ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} className="text-white/30" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

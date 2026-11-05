@@ -17,8 +17,8 @@ import {
   getServerConfigPath,
 } from './xray/manager';
 import { readFileSync } from 'fs';
-import { generateVlessUrl } from './xray/vless';
-import type { ServerData, ClientData } from './store';
+import { generateShareUrl } from './xray/share';
+import type { ServerData, ClientData, InboundData } from './store';
 
 const app = express();
 app.use(cors());
@@ -26,7 +26,6 @@ app.use(express.json());
 
 const PORT = Number(process.env.PORT) || 3001;
 
-// Reset process tracking on startup (xray processes don't survive restart)
 resetProcesses();
 store.resetStatuses();
 
@@ -42,27 +41,44 @@ setInterval(async () => {
   }
 }, 10000);
 
-// Daily traffic point
 setInterval(() => store.pushTrafficPoint(), 3600000);
 store.pushTrafficPoint();
 
 // ===== Helpers =====
-function clientWithVless(c: ClientData): ClientData & { vlessUrl: string } {
+
+function clientWithUrls(c: ClientData): ClientData & { vlessUrl: string; shareUrls: { protocol: string; url: string }[] } {
   const server = store.getServer(c.serverId);
-  if (!server) return { ...c, vlessUrl: '' };
-  return {
-    ...c,
-    vlessUrl: generateVlessUrl({
-      uuid: c.uuid,
-      host: server.host,
-      port: server.port,
-      publicKey: server.realityPublicKey,
-      sni: server.realitySNI,
-      shortId: server.realityShortIds[0] || '',
-      flow: c.flow,
-      name: c.name,
-    }),
-  };
+  if (!server) return { ...c, vlessUrl: '', shareUrls: [] };
+
+  const inbounds = server.inbounds || [];
+  const shareUrls = inbounds
+    .filter((inbound) => inbound.protocol !== 'dokodemo-door')
+    .map((inbound) => {
+      const ss = { ...inbound.securitySettings };
+      // Inject the public key for VLESS+Reality URLs
+      if (inbound.security === 'reality' && server.realityPublicKey) {
+        ss._publicKey = server.realityPublicKey;
+      }
+      const url = generateShareUrl({
+        protocol: inbound.protocol,
+        uuid: c.uuid,
+        host: server.host,
+        port: inbound.port,
+        network: inbound.network,
+        security: inbound.security,
+        securitySettings: ss,
+        transportSettings: inbound.transportSettings,
+        protocolSettings: inbound.protocolSettings,
+        name: c.name,
+      });
+      return { protocol: inbound.protocol, url };
+    })
+    .filter((s) => s.url);
+
+  // Primary URL for backward compat (first non-empty)
+  const primary = shareUrls[0]?.url || '';
+
+  return { ...c, vlessUrl: primary, shareUrls };
 }
 
 function serverWithRunning(s: ServerData): ServerData {
@@ -78,18 +94,9 @@ app.get('/api/xray/versions', async (_req, res) => {
   try {
     const remote = await listAvailableVersions();
     const local = listLocalVersions();
-    res.json({
-      available: remote,
-      downloaded: local,
-      default: store.DEFAULT_XRAY_VERSION,
-    });
-  } catch (e) {
-    // Fallback: return local versions only
-    res.json({
-      available: listLocalVersions(),
-      downloaded: listLocalVersions(),
-      default: store.DEFAULT_XRAY_VERSION,
-    });
+    res.json({ available: remote, downloaded: local, default: store.DEFAULT_XRAY_VERSION });
+  } catch {
+    res.json({ available: listLocalVersions(), downloaded: listLocalVersions(), default: store.DEFAULT_XRAY_VERSION });
   }
 });
 
@@ -117,30 +124,42 @@ app.get('/api/dashboard', (_req, res) => {
     { upload: 0, download: 0 },
   );
 
+  // Protocol distribution from all inbounds
+  const protoMap = new Map<string, number>();
+  for (const s of store.servers) {
+    for (const ib of s.inbounds || []) {
+      protoMap.set(ib.protocol, (protoMap.get(ib.protocol) || 0) + s.clientCount);
+    }
+  }
+  const protoColors: Record<string, string> = {
+    vless: '#8B5CF6', vmess: '#06B6D4', trojan: '#F59E0B',
+    shadowsocks: '#10B981', socks: '#EF4444', http: '#EC4899',
+    'dokodemo-door': '#6366F1',
+  };
+  const protoNames: Record<string, string> = {
+    vless: 'VLESS', vmess: 'VMess', trojan: 'Trojan',
+    shadowsocks: 'Shadowsocks', socks: 'SOCKS', http: 'HTTP',
+    'dokodemo-door': 'Dokodemo',
+  };
+  const protocolDistribution = Array.from(protoMap.entries()).map(([type, count]) => ({
+    type, name: protoNames[type] || type, color: protoColors[type] || '#888', count,
+  }));
+  if (protocolDistribution.length === 0) {
+    protocolDistribution.push({ type: 'vless', name: 'VLESS', color: '#8B5CF6', count: 0 });
+  }
+
   res.json({
     servers: { total: servers.length, online: runningServers },
     clients: { total: store.clients.length, active: activeClients },
     traffic: { today: todayTraffic, month: monthTraffic },
-    protocolDistribution: [
-      { type: 'vless', name: 'VLESS + Reality', color: '#8B5CF6', count: activeClients },
-    ],
+    protocolDistribution,
     recentTraffic: traffic.slice(-7),
     serversList: servers.map((s) => ({
-      id: s.id,
-      name: s.name,
-      flag: s.flag,
-      status: s.status,
-      cpu: s.cpu,
-      ram: s.ram,
-      clientCount: s.clientCount,
-      uploadSpeed: s.uploadSpeed,
-      downloadSpeed: s.downloadSpeed,
-      ping: 0,
+      id: s.id, name: s.name, flag: s.flag, status: s.status,
+      cpu: s.cpu, ram: s.ram, clientCount: s.clientCount,
+      uploadSpeed: s.uploadSpeed, downloadSpeed: s.downloadSpeed, ping: 0,
     })),
-    xrayVersions: {
-      available: listLocalVersions(),
-      default: store.DEFAULT_XRAY_VERSION,
-    },
+    xrayVersions: { available: listLocalVersions(), default: store.DEFAULT_XRAY_VERSION },
   });
 });
 
@@ -148,7 +167,12 @@ app.get('/api/dashboard', (_req, res) => {
 app.get('/api/servers', (_req, res) => {
   const result = store.servers.map((s) => ({
     ...serverWithRunning(s),
-    protocols: [{ id: 1, serverId: s.id, type: 'vless', port: s.port, status: s.status === 'running' ? 'running' : 'stopped', clients: s.clientCount, upload: s.totalUpload, download: s.totalDownload }],
+    protocols: (s.inbounds || []).map((ib) => ({
+      id: ib.id, serverId: s.id, type: ib.protocol, port: ib.port,
+      network: ib.network, security: ib.security,
+      status: s.status === 'running' ? 'running' : 'stopped',
+      clients: s.clientCount, upload: s.totalUpload, download: s.totalDownload,
+    })),
   }));
   res.json(result);
 });
@@ -156,16 +180,10 @@ app.get('/api/servers', (_req, res) => {
 app.post('/api/servers', (req, res) => {
   const { name, host, port, location, flag, xrayVersion, realityDest, realitySNI } = req.body;
   if (!name || !host) return res.status(400).json({ error: 'Name and host required' });
-
   const server = store.addServer({
-    name,
-    host,
-    port: port || 443,
-    location: location || '',
-    flag: flag || '🌐',
-    xrayVersion: xrayVersion || store.DEFAULT_XRAY_VERSION,
-    realityDest,
-    realitySNI,
+    name, host, port: port || 443, location: location || '',
+    flag: flag || '🌐', xrayVersion: xrayVersion || store.DEFAULT_XRAY_VERSION,
+    realityDest, realitySNI,
   });
   res.status(201).json(server);
 });
@@ -184,21 +202,14 @@ app.delete('/api/servers/:id', (req, res) => {
   res.json({ success: true });
 });
 
-// Start/stop xray process
 app.post('/api/servers/:id/start', async (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
   if (!server) return res.status(404).json({ error: 'Server not found' });
-
   const clients = store.getClientsByServer(id);
   const result = await startServer(server, clients);
-
-  if (result.ok) {
-    store.updateServer(id, { status: 'running', error: undefined });
-  } else {
-    store.updateServer(id, { status: 'error', error: result.error });
-  }
-
+  if (result.ok) store.updateServer(id, { status: 'running', error: undefined });
+  else store.updateServer(id, { status: 'error', error: result.error });
   res.json({ success: result.ok, error: result.error });
 });
 
@@ -209,48 +220,34 @@ app.post('/api/servers/:id/stop', (req, res) => {
   res.json({ success: true });
 });
 
-// Restart xray process
 app.post('/api/servers/:id/restart', async (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
   if (!server) return res.status(404).json({ error: 'Server not found' });
-
   const clients = store.getClientsByServer(id);
   const result = await restartServer(server, clients);
-
-  if (result.ok) {
-    store.updateServer(id, { status: 'running', error: undefined });
-  } else {
-    store.updateServer(id, { status: 'error', error: result.error });
-  }
-
+  if (result.ok) store.updateServer(id, { status: 'running', error: undefined });
+  else store.updateServer(id, { status: 'error', error: result.error });
   res.json({ success: result.ok, error: result.error });
 });
 
-// Regenerate Reality keys
 app.post('/api/servers/:id/regenerate-keys', (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
   if (!server) return res.status(404).json({ error: 'Server not found' });
-
   const updated = store.regenerateServerKeys(id);
   res.json({ success: true, server: updated });
 });
 
-// Get server logs
 app.get('/api/servers/:id/logs', (req, res) => {
-  const id = Number(req.params.id);
-  res.json({ logs: getServerLogs(id) });
+  res.json({ logs: getServerLogs(Number(req.params.id)) });
 });
 
-// Clear server logs
 app.delete('/api/servers/:id/logs', (req, res) => {
-  const id = Number(req.params.id);
-  clearServerLogs(id);
+  clearServerLogs(Number(req.params.id));
   res.json({ success: true });
 });
 
-// Export server config
 app.get('/api/servers/:id/config', (req, res) => {
   const id = Number(req.params.id);
   const server = store.getServer(id);
@@ -265,50 +262,101 @@ app.get('/api/servers/:id/config', (req, res) => {
   }
 });
 
+// ── Inbound CRUD ───────────────────────────────────────────────────────
+
+app.get('/api/servers/:id/inbounds', (req, res) => {
+  const id = Number(req.params.id);
+  res.json(store.getInbounds(id));
+});
+
+app.post('/api/servers/:id/inbounds', (req, res) => {
+  const id = Number(req.params.id);
+  const server = store.getServer(id);
+  if (!server) return res.status(404).json({ error: 'Server not found' });
+  const { protocol, port, network, security, protocolSettings, transportSettings, securitySettings } = req.body;
+  if (!protocol || !port) return res.status(400).json({ error: 'Protocol and port required' });
+  const inbound = store.addInbound(id, { protocol, port, network, security, protocolSettings, transportSettings, securitySettings });
+  if (!inbound) return res.status(500).json({ error: 'Failed to create inbound' });
+  // If server is running, restart to apply
+  if (isServerRunning(id)) {
+    const clients = store.getClientsByServer(id);
+    startServer(server, clients);
+  }
+  res.status(201).json(inbound);
+});
+
+app.put('/api/servers/:id/inbounds/:inboundId', (req, res) => {
+  const id = Number(req.params.id);
+  const inboundId = Number(req.params.inboundId);
+  const updated = store.updateInbound(id, inboundId, req.body);
+  if (!updated) return res.status(404).json({ error: 'Inbound not found' });
+  // If server is running, restart to apply
+  const server = store.getServer(id);
+  if (server && isServerRunning(id)) {
+    const clients = store.getClientsByServer(id);
+    startServer(server, clients);
+  }
+  res.json(updated);
+});
+
+app.delete('/api/servers/:id/inbounds/:inboundId', (req, res) => {
+  const id = Number(req.params.id);
+  const inboundId = Number(req.params.inboundId);
+  const deleted = store.deleteInbound(id, inboundId);
+  if (!deleted) return res.status(404).json({ error: 'Inbound not found' });
+  const server = store.getServer(id);
+  if (server && isServerRunning(id)) {
+    const clients = store.getClientsByServer(id);
+    startServer(server, clients);
+  }
+  res.json({ success: true });
+});
+
+app.post('/api/servers/:id/inbounds/:inboundId/regenerate-keys', (req, res) => {
+  const id = Number(req.params.id);
+  const inboundId = Number(req.params.inboundId);
+  // Regenerate keys for a specific reality inbound
+  const server = store.getServer(id);
+  if (!server) return res.status(404).json({ error: 'Server not found' });
+  // Use the server-level key regeneration (updates all reality inbounds)
+  const updated = store.regenerateServerKeys(id);
+  res.json({ success: true, server: updated });
+});
+
 // Clients
 app.get('/api/clients', (_req, res) => {
-  res.json(store.clients.map(clientWithVless));
+  res.json(store.clients.map(clientWithUrls));
 });
 
 app.post('/api/clients', (req, res) => {
   const { name, email, serverId, totalLimit, expiryDate } = req.body;
   if (!name || !email || !serverId) return res.status(400).json({ error: 'Name, email and server required' });
-
   const client = store.addClient({ name, email, serverId, totalLimit, expiryDate });
-
-  // If server is running, restart to apply config
   const server = store.getServer(serverId);
   if (server && isServerRunning(serverId)) {
     const clients = store.getClientsByServer(serverId);
     startServer(server, clients);
   }
-
-  res.status(201).json(clientWithVless(client));
+  res.status(201).json(clientWithUrls(client));
 });
 
 app.put('/api/clients/:id', (req, res) => {
   const id = Number(req.params.id);
   const updated = store.updateClient(id, req.body);
   if (!updated) return res.status(404).json({ error: 'Client not found' });
-
-  // If server is running, restart to apply config
   const server = store.getServer(updated.serverId);
   if (server && isServerRunning(updated.serverId)) {
     const clients = store.getClientsByServer(updated.serverId);
     startServer(server, clients);
   }
-
-  res.json(clientWithVless(updated));
+  res.json(clientWithUrls(updated));
 });
 
 app.delete('/api/clients/:id', (req, res) => {
   const id = Number(req.params.id);
   const client = store.clients.find((c) => c.id === id);
   const serverId = client?.serverId;
-
   store.deleteClient(id);
-
-  // If server is running, restart to apply config
   if (serverId) {
     const server = store.getServer(serverId);
     if (server && isServerRunning(serverId)) {
@@ -316,16 +364,14 @@ app.delete('/api/clients/:id', (req, res) => {
       startServer(server, clients);
     }
   }
-
   res.json({ success: true });
 });
 
-// Reset client traffic stats
 app.post('/api/clients/:id/reset-stats', (req, res) => {
   const id = Number(req.params.id);
   const updated = store.resetClientStats(id);
   if (!updated) return res.status(404).json({ error: 'Client not found' });
-  res.json(clientWithVless(updated));
+  res.json(clientWithUrls(updated));
 });
 
 // Traffic
@@ -337,17 +383,35 @@ app.get('/api/traffic', (req, res) => {
     { upload: 0, download: 0 },
   );
   const perServer = store.servers.map((s) => ({
-    name: s.name,
-    flag: s.flag,
-    upload: s.totalUpload,
-    download: s.totalDownload,
+    name: s.name, flag: s.flag, upload: s.totalUpload, download: s.totalDownload,
   }));
+
+  // Protocol distribution from inbounds
+  const protoMap = new Map<string, number>();
+  for (const s of store.servers) {
+    for (const ib of s.inbounds || []) {
+      protoMap.set(ib.protocol, (protoMap.get(ib.protocol) || 0) + s.clientCount);
+    }
+  }
+  const protoColors: Record<string, string> = {
+    vless: '#8B5CF6', vmess: '#06B6D4', trojan: '#F59E0B',
+    shadowsocks: '#10B981', socks: '#EF4444', http: '#EC4899',
+    'dokodemo-door': '#6366F1',
+  };
+  const protoNames: Record<string, string> = {
+    vless: 'VLESS', vmess: 'VMess', trojan: 'Trojan',
+    shadowsocks: 'Shadowsocks', socks: 'SOCKS', http: 'HTTP',
+    'dokodemo-door': 'Dokodemo',
+  };
+  let protocolDistribution = Array.from(protoMap.entries()).map(([type, count]) => ({
+    type, name: protoNames[type] || type, color: protoColors[type] || '#888', count,
+  }));
+  if (protocolDistribution.length === 0) {
+    protocolDistribution = [{ type: 'vless', name: 'VLESS', color: '#8B5CF6', count: 0 }];
+  }
+
   res.json({
-    daily: traffic,
-    perServer,
-    protocolDistribution: [
-      { type: 'vless', name: 'VLESS + Reality', color: '#8B5CF6', count: store.clients.filter((c) => c.status === 'active').length },
-    ],
+    daily: traffic, perServer, protocolDistribution,
     totals: { upload: totals.upload, download: totals.download, total: totals.upload + totals.download },
   });
 });
@@ -356,7 +420,6 @@ app.get('/api/traffic', (req, res) => {
 app.get('/api/notifications', (_req, res) => {
   const notifications: { id: number; type: 'warning' | 'error' | 'info' | 'success'; title: string; message: string; time: string; read: boolean }[] = [];
   let nid = 1;
-
   const servers = store.servers.map(serverWithRunning);
 
   servers.forEach((s) => {
@@ -378,7 +441,7 @@ app.get('/api/notifications', (_req, res) => {
       if (pct > 1) {
         notifications.push({ id: nid++, type: 'error', title: 'Data Limit Exceeded', message: `${c.name} exceeded limit: ${used.toFixed(1)} / ${c.totalLimit} GB`, time: new Date(Date.now() - 43200000).toISOString(), read: false });
       } else if (pct > 0.8) {
-        notifications.push({ id: nid++, type: 'warning', title: 'Data Limit Near', message: `${c.name} used ${Math.round(pct * 100)}% of limit (${used.toFixed(1)} / ${c.totalLimit} GB)`, time: new Date(Date.now() - 43200000).toISOString(), read: false });
+        notifications.push({ id: nid++, type: 'warning', title: 'Data Limit Near', message: `${c.name} used ${Math.round(pct * 100)}% of limit`, time: new Date(Date.now() - 43200000).toISOString(), read: false });
       }
     }
     const daysLeft = Math.ceil((new Date(c.expiryDate).getTime() - Date.now()) / 86400000);
@@ -399,7 +462,6 @@ app.get('/api/ping', async (_req, res) => {
   const servers = store.servers.map(serverWithRunning);
   const results = await Promise.all(
     servers.map(async (s) => {
-      // Ping the local xray port to check if the process is listening
       const ping = isServerRunning(s.id) ? await tcpPing('127.0.0.1', s.port) : -1;
       return { id: s.id, name: s.name, ping, status: s.status };
     }),
@@ -408,13 +470,10 @@ app.get('/api/ping', async (_req, res) => {
 });
 
 // Settings
-app.get('/api/settings', (_req, res) => {
-  res.json(store.settings);
-});
+app.get('/api/settings', (_req, res) => res.json(store.settings));
 
 app.put('/api/settings', (req, res) => {
-  const updated = store.updateSettings(req.body);
-  res.json(updated);
+  res.json(store.updateSettings(req.body));
 });
 
 app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));

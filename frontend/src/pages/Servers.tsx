@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, ChevronDown, Cpu, HardDrive, MemoryStick, Trash2, X, Globe, Wifi, Play, Square, Download, Loader2, RotateCcw, FileDown, ScrollText, Pencil, Shield } from 'lucide-react';
+import { Plus, Search, ChevronDown, Cpu, HardDrive, MemoryStick, Trash2, X, Globe, Wifi, Play, Square, Download, Loader2, RotateCcw, FileDown, ScrollText, Pencil, Shield, Layers } from 'lucide-react';
 import { api } from '../api';
-import { PROTOCOL_META } from '../types';
-import type { Server, PingData, XrayVersions } from '../types';
-import ProtocolEditor from '../components/ProtocolEditor';
+import { PROTOCOL_META } from '../protocols';
+import type { Server, PingData, XrayVersions, Inbound } from '../types';
+import InboundEditor from '../components/InboundEditor';
 
 const flags = ['🇩🇪', '🇳🇱', '🇯🇵', '🇺🇸', '🇸🇬', '🇬🇧', '🇫🇷', '🇨🇦', '🌐'];
 const REALITY_TARGETS = [
@@ -31,7 +31,7 @@ export default function Servers() {
   const [pings, setPings] = useState<PingData[]>([]);
   const [editServer, setEditServer] = useState<Server | null>(null);
   const [editForm, setEditForm] = useState({ name: '', host: '', port: 443, location: '', flag: '🌐' });
-  const [protocolServer, setProtocolServer] = useState<Server | null>(null);
+  const [inboundEditor, setInboundEditor] = useState<{ server: Server; inbound?: Inbound | null } | null>(null);
   const [logsServer, setLogsServer] = useState<Server | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [logsInterval, setLogsInterval] = useState<ReturnType<typeof setInterval> | null>(null);
@@ -248,14 +248,20 @@ export default function Servers() {
                 </div>
               </div>
 
-              {/* Protocol tag */}
+              {/* Protocol tags from inbounds */}
               <div className="flex flex-wrap gap-1.5 mb-3">
-                <span
-                  className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                  style={{ background: PROTOCOL_META.vless.color + '15', color: PROTOCOL_META.vless.color }}
-                >
-                  VLESS + Reality :{s.port}
-                </span>
+                {(s.inbounds || []).map((ib) => {
+                  const meta = PROTOCOL_META[ib.protocol] || { name: ib.protocol, color: '#888' };
+                  return (
+                    <span
+                      key={ib.id}
+                      className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                      style={{ background: meta.color + '15', color: meta.color }}
+                    >
+                      {meta.name} · {ib.security} :{ib.port}
+                    </span>
+                  );
+                })}
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-white/40 font-medium">
                   Xray {s.xrayVersion}
                 </span>
@@ -332,19 +338,59 @@ export default function Servers() {
                   </button>
                 </div>
 
-                {/* Secondary actions */}
-                <div className="grid grid-cols-2 gap-2">
+                {/* Inbound management */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-[11px] text-white/50 font-medium">
+                    <Layers size={13} className="text-violet-400" />
+                    Inbounds ({(s.inbounds || []).length})
+                  </div>
+                  {(s.inbounds || []).map((ib) => {
+                    const meta = PROTOCOL_META[ib.protocol] || { name: ib.protocol, color: '#888' };
+                    return (
+                      <div key={ib.id} className="flex items-center gap-2 glass-soft rounded-xl p-2.5">
+                        <span
+                          className="text-[10px] px-2 py-1 rounded-full font-medium flex-shrink-0"
+                          style={{ background: meta.color + '15', color: meta.color }}
+                        >
+                          {meta.name}
+                        </span>
+                        <span className="text-[10px] text-white/40 flex-1 truncate">
+                          {ib.network} · {ib.security} · :{ib.port}
+                        </span>
+                        <button
+                          onClick={() => setInboundEditor({ server: s, inbound: ib })}
+                          className="text-white/30 hover:text-violet-400 transition-colors flex-shrink-0"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Delete ${meta.name} inbound on port ${ib.port}?`)) {
+                              api.servers.deleteInbound(s.id, ib.id).then(load);
+                            }
+                          }}
+                          className="text-white/20 hover:text-red-400 transition-colors flex-shrink-0"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    );
+                  })}
                   <button
-                    onClick={() => setProtocolServer(s)}
-                    className="py-2.5 rounded-2xl bg-violet-500/10 text-violet-300 text-[11px] font-medium hover:bg-violet-500/20 transition-colors flex items-center justify-center gap-1.5 ring-1 ring-violet-500/20"
+                    onClick={() => setInboundEditor({ server: s, inbound: null })}
+                    className="w-full py-2.5 rounded-2xl bg-violet-500/10 text-violet-300 text-[11px] font-medium hover:bg-violet-500/20 transition-colors flex items-center justify-center gap-1.5 ring-1 ring-violet-500/20"
                   >
-                    <Shield size={13} /> Edit Protocol
+                    <Plus size={13} /> Add Inbound
                   </button>
+                </div>
+
+                {/* Secondary actions */}
+                <div className="grid grid-cols-3 gap-2 pt-1">
                   <button
                     onClick={() => handleEdit(s)}
                     className="py-2.5 rounded-2xl bg-white/5 text-white/60 text-[11px] font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <Pencil size={13} /> Edit Server
+                    <Pencil size={13} /> Edit
                   </button>
                   <button
                     onClick={() => openLogs(s)}
@@ -560,11 +606,12 @@ export default function Servers() {
         </div>
       )}
 
-      {/* Protocol Editor */}
-      {protocolServer && (
-        <ProtocolEditor
-          server={protocolServer}
-          onClose={() => setProtocolServer(null)}
+      {/* Inbound Editor */}
+      {inboundEditor && (
+        <InboundEditor
+          server={inboundEditor.server}
+          inbound={inboundEditor.inbound}
+          onClose={() => setInboundEditor(null)}
           onSaved={load}
         />
       )}
